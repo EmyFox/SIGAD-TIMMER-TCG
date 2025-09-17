@@ -67,6 +67,35 @@ const IconLayers = (p: React.SVGProps<SVGSVGElement>) => (
     <path d="M3 12l9 5 9-5M3 16l9 5 9-5" stroke="currentColor" strokeWidth="1.5" opacity=".6" />
   </svg>
 );
+const IconSparkles = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path
+      d="M12 3.5 13.4 7l3.6 1.2L13.4 9.4 12 13l-1.4-3.6L7 8.2 10.6 7 12 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path d="M5.5 4.5 6.2 6.6 8.3 7.3 6.2 8 5.5 10.1 4.8 8 2.7 7.3 4.8 6.6 5.5 4.5Z" fill="currentColor" opacity=".45" />
+    <path d="m18.6 13.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" fill="currentColor" opacity=".45" />
+  </svg>
+);
+const IconBolt = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path
+      d="m12 3-6 10h5v8l7-11h-5l2.6-7H12Z"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+const IconFlag = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path d="M5 3v18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M5 4.5h11l-1.6 3.5 1.6 3.5H5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+  </svg>
+);
 /* ==================== Helpers ==================== */
 const pad2 = (n: number) => n.toString().padStart(2, "0");
 const fmtClock = (tf: TimeFmt) => (tf === "12" ? "hh:mm A" : "HH:mm");
@@ -215,6 +244,112 @@ const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = (
           style={{ opacity: i === index ? 1 : 0.75 }}
         />
       ))}
+    </div>
+  );
+};
+
+const BokehBackdrop: React.FC<{ isLight: boolean; disableFX: boolean }> = ({ isLight, disableFX }) => {
+  if (disableFX) return null;
+  return (
+    <div className={`hud-bokeh ${isLight ? "hud-bokeh--light" : ""}`} aria-hidden>
+      {Array.from({ length: 7 }).map((_, i) => (
+        <span key={i} className={`hud-bokeh__item hud-bokeh__item--${i + 1}`} />
+      ))}
+    </div>
+  );
+};
+
+interface RoundTrackProps {
+  total: number;
+  current: number;
+  completed: number;
+  isLight: boolean;
+  accent: "round" | "break";
+  stateLabel: string;
+}
+
+const RoundTrack: React.FC<RoundTrackProps> = ({ total, current, completed, isLight, accent, stateLabel }) => {
+  const safeTotal = Math.max(1, total);
+  const safeCurrent = Math.min(safeTotal, Math.max(1, current));
+  const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
+  const maxDots = 12;
+  let start = Math.max(1, safeCurrent - Math.floor(maxDots / 2));
+  let end = Math.min(safeTotal, start + maxDots - 1);
+  start = Math.max(1, end - maxDots + 1);
+  end = Math.min(safeTotal, start + maxDots - 1);
+  const showLead = start > 1;
+  const showTail = end < safeTotal;
+  const nodes = [] as number[];
+  for (let idx = start; idx <= end; idx++) nodes.push(idx);
+
+  const accentIcon = accent === "break" ? (
+    <IconCoffee className="size-5" />
+  ) : (
+    <IconFlag className="size-5" />
+  );
+  const description = (() => {
+    if (stateLabel === "Terminado") return "El torneo llegó a la meta. Puedes preparar la siguiente fase.";
+    if (stateLabel === "Pausado") return "La ronda está en pausa temporal. Retoma cuando la sala esté lista.";
+    if (accent === "break") return "Disfruta del descanso mientras preparamos la próxima ronda.";
+    return "Seguimiento visual del avance global de todas las rondas.";
+  })();
+
+  return (
+    <div
+      className={["round-track", isLight ? "round-track--light" : "", accent === "break" ? "round-track--break" : ""].join(
+        " "
+      )}
+    >
+      <div className="round-track__header">
+        <span className="round-track__icon">{accentIcon}</span>
+        <div>
+          <span className="round-track__subtitle">
+            {accent === "break" ? "Tiempo de descanso" : "Mapa de rondas"}
+          </span>
+          <div className="round-track__title">
+            {accent === "break" ? "Break panorámico" : "Avance general"}
+          </div>
+        </div>
+        <span className="round-track__meta">
+          {safeCompleted}/{safeTotal} completadas
+        </span>
+      </div>
+      <div className="round-track__rail" role="list" aria-label="Avance de rondas">
+        {showLead && (
+          <span className="round-track__ellipsis" aria-hidden>
+            …
+          </span>
+        )}
+        {nodes.map((idx) => {
+          const status = idx <= safeCompleted ? "done" : idx === safeCurrent && safeCompleted !== safeTotal ? "now" : "todo";
+          const label =
+            status === "done" ? "Finalizada" : status === "now" ? "En curso" : accent === "break" ? "Pendiente" : "Pendiente";
+          return (
+            <span
+              key={idx}
+              className={["round-track__node", `round-track__node--${status}`].join(" ")}
+              role="listitem"
+              aria-label={`Ronda ${idx}: ${label}`}
+            >
+              <span className="round-track__label">{idx}</span>
+              <span
+                className={[
+                  "round-track__spark",
+                  status === "now" ? "round-track__spark--active" : "",
+                  status === "done" ? "round-track__spark--trail" : "",
+                ].join(" ")}
+                aria-hidden
+              />
+            </span>
+          );
+        })}
+        {showTail && (
+          <span className="round-track__ellipsis" aria-hidden>
+            …
+          </span>
+        )}
+      </div>
+      <p className="round-track__caption">{description}</p>
     </div>
   );
 };
@@ -398,6 +533,9 @@ const Display: React.FC = () => {
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
   const schedule = active ? computeSchedule(active, timeFmt) : [];
+  const nextEvent = schedule[0] ?? null;
+  const autoMinutes = active?.nextRoundMinutes ?? active?.roundMinutes ?? null;
+  const autoLabel = autoMinutes && autoMinutes > 0 ? `${autoMinutes} min` : "manual";
 
   const progressPct = useMemo(() => {
     if (!active) return 0;
@@ -439,7 +577,23 @@ const Display: React.FC = () => {
     return expired ? "Terminado" : active.timer.running ? "En curso" : active.timer.target ? "Pausado" : "Sin iniciar";
   }, [active, remaining]);
 
+  const trackData = useMemo(() => {
+    if (!active) return null;
+    const total = Math.max(1, active.roundsTotal || 1);
+    const completed = Math.min(active.roundsCompleted, total);
+    const running = active.timer.target !== null && (active.timer.running || active.timer.remainingMs > 0);
+    const inRound = running && active.timer.mode === "round";
+    const current =
+      stateLabel === "Terminado"
+        ? total
+        : inRound
+        ? Math.min(total, active.roundsCompleted + 1)
+        : Math.min(total, Math.max(1, completed || 1));
+    return { total, completed, current };
+  }, [active, stateLabel]);
+
   const accent: "indigo" | "amber" = active?.timer.mode === "break" ? "amber" : "indigo";
+  const trackAccent: "break" | "round" = active?.timer.mode === "break" ? "break" : "round";
   const isLight = active?.theme === "light";
 
   const pages = useMemo(() => chunk(tournaments, 3), [tournaments]);
@@ -472,6 +626,7 @@ const Display: React.FC = () => {
         />
         {!disableFX && <div className={pick(isLight ?? false, "noise-layer opacity-[.04]", "noise-layer opacity-10")} />}
         <div className={pick(isLight ?? false, "bg-logo bg-logo--light", "bg-logo")} />
+        <BokehBackdrop isLight={!!isLight} disableFX={disableFX} />
         {!disableFX && <div className={pick(isLight ?? false, "scanlines opacity-[.03]", "scanlines opacity-[.06]")} />}
         {!disableFX && (
           <>
@@ -621,6 +776,68 @@ const Display: React.FC = () => {
               </StatCard>
             </div>
 
+            {/* Focus cards */}
+            <div
+              className={["grid grid-cols-1 gap-4 mb-6", trackData ? "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" : ""].join(
+                " "
+              )}
+            >
+              <div
+                className={[
+                  "hud-infocard",
+                  active.autoStartNext ? "hud-infocard--accent" : "hud-infocard--muted",
+                ].join(" ")}
+              >
+                <div className="hud-infocard__header">
+                  <span className="hud-infocard__icon">
+                    <IconSparkles className="size-5" />
+                  </span>
+                  <div>
+                    <span className="hud-infocard__subtitle">Auto inicio</span>
+                    <div className="hud-infocard__title">
+                      {active.autoStartNext ? "Modo automático listo" : "Modo manual en espera"}
+                    </div>
+                  </div>
+                  <span
+                    className={["hud-infocard__chip", active.autoStartNext ? "hud-infocard__chip--on" : ""].join(" ")}
+                  >
+                    {active.autoStartNext ? "Activado" : "Manual"}
+                  </span>
+                </div>
+                <p className="hud-infocard__copy">
+                  {active.autoStartNext
+                    ? "El sistema iniciará automáticamente la siguiente ronda al terminar la cuenta regresiva."
+                    : "Lanza la siguiente ronda desde la app justo cuando el equipo esté listo para continuar."}
+                </p>
+                <div className="hud-infocard__tags">
+                  <span className="hud-infocard__tag">
+                    <IconBolt className="size-3.5" /> Ritmo {autoLabel}
+                  </span>
+                  {nextEvent && (
+                    <span className="hud-infocard__tag hud-infocard__tag--pulse">
+                      <IconClock className="size-3.5" /> Próximo hito: <strong>{nextEvent.time}</strong>
+                    </span>
+                  )}
+                </div>
+                {nextEvent && (
+                  <div className="hud-infocard__footer">
+                    <IconTarget className="size-4" />
+                    {nextEvent.label} a las <strong>{nextEvent.time}</strong>
+                  </div>
+                )}
+              </div>
+              {trackData && (
+                <RoundTrack
+                  total={trackData.total}
+                  completed={trackData.completed}
+                  current={trackData.current}
+                  isLight={!!isLight}
+                  accent={trackAccent}
+                  stateLabel={stateLabel}
+                />
+              )}
+            </div>
+
             {/* Progreso */}
             <div className="mb-2">
               <div
@@ -652,31 +869,33 @@ const Display: React.FC = () => {
             {/* Hitos */}
             {schedule.length > 0 && (
               <div
-                className={pick(
-                  !!isLight,
-                  "mt-5 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
-                  "mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
-                )}
+                className={[
+                  pick(
+                    !!isLight,
+                    "mt-5 rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
+                    "mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
+                  ),
+                  "schedule-card",
+                ].join(" ")}
               >
-                <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>
-                  Próximos hitos
+                <div className="schedule-card__header">
+                  <span className="schedule-card__subtitle">Próximos hitos</span>
+                  <span className="schedule-card__hint">Actualiza automáticamente al cerrar cada ronda</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="schedule-card__list">
                   {schedule.map((it, i) => (
-                    <span
+                    <div
                       key={i}
-                      className={pick(
-                        !!isLight,
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm chip-glow",
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-1.5 text-sm chip-glow"
-                      )}
+                      className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
                     >
-                      <IconClock className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                      <span className={pick(!!isLight, "text-zinc-600", "text-zinc-300")}>{it.label}:</span>
-                      <strong className={pick(!!isLight, "tracking-tight text-zinc-900", "tracking-tight text-zinc-100")}>
-                        {it.time}
-                      </strong>
-                    </span>
+                      <span className="schedule-chip__icon">
+                        <IconClock className="size-4" />
+                      </span>
+                      <div className="schedule-chip__content">
+                        <span className="schedule-chip__label">{it.label}</span>
+                        <span className="schedule-chip__time">{it.time}</span>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
