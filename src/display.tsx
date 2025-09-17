@@ -354,6 +354,160 @@ const RoundTrack: React.FC<RoundTrackProps> = ({ total, current, completed, isLi
   );
 };
 
+interface ProgressPanelProps {
+  isLight: boolean;
+  accent: "indigo" | "amber";
+  displayPct: number;
+  transitionClass: string;
+  stateLabel: string;
+  nextEvent: { label: string; time: string } | null;
+  remaining: number;
+  mode: DisplayTournament["timer"]["mode"] | null;
+  currentRound: number | null;
+  roundMinutes: number;
+  breakMinutes: number;
+  breakEnabled: boolean;
+}
+
+const ProgressPanel: React.FC<ProgressPanelProps> = ({
+  isLight,
+  accent,
+  displayPct,
+  transitionClass,
+  stateLabel,
+  nextEvent,
+  remaining,
+  mode,
+  currentRound,
+  roundMinutes,
+  breakMinutes,
+  breakEnabled,
+}) => {
+  const palette = useMemo(() => {
+    if (accent === "amber") {
+      return { start: "#facc15", mid: "#fb923c", end: "#f43f5e" };
+    }
+    if (isLight) {
+      return { start: "#38bdf8", mid: "#6366f1", end: "#a855f7" };
+    }
+    return { start: "#22d3ee", mid: "#6366f1", end: "#c084fc" };
+  }, [accent, isLight]);
+
+  const { h, m, s } = formatSplit(remaining);
+  const pct = Math.round(displayPct);
+  const isBreak = mode === "break";
+  const icon = isBreak ? <IconCoffee className="size-5" /> : <IconPlay className="size-5" />;
+  const subtitle = isBreak ? "Descanso oficial" : "Ritmo del torneo";
+  const title = (() => {
+    if (!mode) return "Temporizador listo";
+    if (isBreak) {
+      if (!breakEnabled) return "Break libre";
+      return breakMinutes > 0 ? `Break de ${breakMinutes} min` : "Break en progreso";
+    }
+    if (mode === "round") {
+      if (stateLabel === "Terminado") return "Ronda finalizada";
+      return currentRound ? `Ronda ${currentRound} en curso` : "Ronda en curso";
+    }
+    return "Temporizador activo";
+  })();
+
+  const pacePrimary = isBreak
+    ? breakEnabled && breakMinutes > 0
+      ? `${breakMinutes} min`
+      : "Flexible"
+    : roundMinutes > 0
+    ? `${roundMinutes} min`
+    : "Flexible";
+  const paceSecondary = isBreak ? "duración del break" : "duración de la ronda";
+  const nextPrimary = nextEvent ? nextEvent.label : stateLabel;
+  const nextSecondary = nextEvent ? nextEvent.time : "seguimiento en vivo";
+
+  const accentStyle = useMemo(
+    () =>
+      ({
+        ["--accent-start" as any]: palette.start,
+        ["--accent-mid" as any]: palette.mid,
+        ["--accent-end" as any]: palette.end,
+        ["--progress" as any]: displayPct,
+      }) as React.CSSProperties,
+    [palette.end, palette.mid, palette.start, displayPct]
+  );
+
+  const freezeMotion = transitionClass === "no-transition";
+  const fillMotionClass = freezeMotion ? "no-transition" : "transition-width";
+
+  return (
+    <div className={["progress-panel", isLight ? "progress-panel--light" : ""].join(" ")} style={accentStyle}>
+      <span className="progress-panel__halo" aria-hidden />
+      <div className="progress-panel__header">
+        <span className="progress-panel__icon">{icon}</span>
+        <div>
+          <span className="progress-panel__subtitle">{subtitle}</span>
+          <div className="progress-panel__title">{title}</div>
+        </div>
+        <span className="progress-panel__chip">
+          <span className="progress-panel__chipIcon" aria-hidden>
+            <IconSparkles className="size-4" />
+          </span>
+          <span className="progress-panel__chipMeta">
+            <span className="progress-panel__chipValue">
+              {pct}
+              <sup>%</sup>
+            </span>
+            <span className="progress-panel__chipLabel">{stateLabel}</span>
+          </span>
+        </span>
+      </div>
+
+      <div className="progress-panel__meter">
+        <div className={["progress-beam", freezeMotion ? "progress-beam--static" : ""].join(" ")}>
+          <div className={["progress-beam__fill", fillMotionClass].join(" ")} />
+          <span className={["progress-beam__glow", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+          <span className={["progress-beam__spark", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+          <span className={["progress-beam__shine", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+        </div>
+        <div className="progress-panel__scale" aria-hidden>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <span key={idx} className="progress-panel__tick" style={{ left: `${idx * 25}%` }} />
+          ))}
+        </div>
+      </div>
+
+      <div className="progress-panel__legend">
+        <div className="progress-panel__fact">
+          <span className="progress-panel__factIcon" aria-hidden>
+            <IconClock className="size-4" />
+          </span>
+          <span>
+            <strong>
+              {h}:{m}:{s}
+            </strong>
+            <small>tiempo restante</small>
+          </span>
+        </div>
+        <div className="progress-panel__fact">
+          <span className="progress-panel__factIcon" aria-hidden>
+            <IconBolt className="size-4" />
+          </span>
+          <span>
+            <strong>{pacePrimary}</strong>
+            <small>{paceSecondary}</small>
+          </span>
+        </div>
+        <div className="progress-panel__fact progress-panel__fact--wide">
+          <span className="progress-panel__factIcon" aria-hidden>
+            <IconTarget className="size-4" />
+          </span>
+          <span>
+            <strong>{nextPrimary}</strong>
+            <small>{nextSecondary}</small>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ==================== Super Header (solo visual) ==================== */
 const SuperHeader: React.FC<{
   isLight: boolean;
@@ -534,9 +688,6 @@ const Display: React.FC = () => {
   const { h, m, s } = formatSplit(remaining);
   const schedule = active ? computeSchedule(active, timeFmt) : [];
   const nextEvent = schedule[0] ?? null;
-  const autoMinutes = active?.nextRoundMinutes ?? active?.roundMinutes ?? null;
-  const autoLabel = autoMinutes && autoMinutes > 0 ? `${autoMinutes} min` : "manual";
-
   const progressPct = useMemo(() => {
     if (!active) return 0;
     const total =
@@ -782,50 +933,22 @@ const Display: React.FC = () => {
                 " "
               )}
             >
-              <div
-                className={[
-                  "hud-infocard",
-                  active.autoStartNext ? "hud-infocard--accent" : "hud-infocard--muted",
-                ].join(" ")}
-              >
-                <div className="hud-infocard__header">
-                  <span className="hud-infocard__icon">
-                    <IconSparkles className="size-5" />
-                  </span>
-                  <div>
-                    <span className="hud-infocard__subtitle">Auto inicio</span>
-                    <div className="hud-infocard__title">
-                      {active.autoStartNext ? "Modo automático listo" : "Modo manual en espera"}
-                    </div>
-                  </div>
-                  <span
-                    className={["hud-infocard__chip", active.autoStartNext ? "hud-infocard__chip--on" : ""].join(" ")}
-                  >
-                    {active.autoStartNext ? "Activado" : "Manual"}
-                  </span>
-                </div>
-                <p className="hud-infocard__copy">
-                  {active.autoStartNext
-                    ? "El sistema iniciará automáticamente la siguiente ronda al terminar la cuenta regresiva."
-                    : "Lanza la siguiente ronda desde la app justo cuando el equipo esté listo para continuar."}
-                </p>
-                <div className="hud-infocard__tags">
-                  <span className="hud-infocard__tag">
-                    <IconBolt className="size-3.5" /> Ritmo {autoLabel}
-                  </span>
-                  {nextEvent && (
-                    <span className="hud-infocard__tag hud-infocard__tag--pulse">
-                      <IconClock className="size-3.5" /> Próximo hito: <strong>{nextEvent.time}</strong>
-                    </span>
-                  )}
-                </div>
-                {nextEvent && (
-                  <div className="hud-infocard__footer">
-                    <IconTarget className="size-4" />
-                    {nextEvent.label} a las <strong>{nextEvent.time}</strong>
-                  </div>
-                )}
-              </div>
+              {active && (
+                <ProgressPanel
+                  isLight={!!isLight}
+                  accent={accent}
+                  displayPct={displayPct}
+                  transitionClass={transitionClass}
+                  stateLabel={stateLabel}
+                  nextEvent={nextEvent}
+                  remaining={remaining}
+                  mode={active.timer.mode ?? null}
+                  currentRound={trackData?.current ?? null}
+                  roundMinutes={active.roundMinutes}
+                  breakMinutes={active.breakMinutes}
+                  breakEnabled={active.breakEnabled}
+                />
+              )}
               {trackData && (
                 <RoundTrack
                   total={trackData.total}
@@ -836,34 +959,6 @@ const Display: React.FC = () => {
                   stateLabel={stateLabel}
                 />
               )}
-            </div>
-
-            {/* Progreso */}
-            <div className="mb-2">
-              <div
-                className={pick(
-                  !!isLight,
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 relative",
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-800/80 relative"
-                )}
-                style={
-                  {
-                    ["--p" as any]: displayPct,
-                    ["--c1" as any]: accent === "amber" ? "#FFB457" : isLight ? "#0ea5e9" : "#00eaff",
-                    ["--c2" as any]: accent === "amber" ? "#FF3D81" : isLight ? "#6366f1" : "#8b5cf6",
-                    color: "var(--c2)",
-                  } as React.CSSProperties
-                }
-              >
-                <div className={`h-full progress-stripes progress-fill ${transitionClass}`} style={{ width: `${displayPct}%` }} />
-                <span className="progress-comet" aria-hidden />
-                <span className="progress-tip" aria-hidden />
-                <span className="progress-edge" aria-hidden />
-              </div>
-              <div className={pick(!!isLight, "mt-2 text-[12px] text-zinc-600 flex items-center gap-2", "mt-2 text-[12px] text-zinc-400 flex items-center gap-2")}>
-                <IconPlay className={pick(!!isLight, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} />
-                {active.timer.mode === "break" ? "Progreso del break" : "Progreso de la ronda"}
-              </div>
             </div>
 
             {/* Hitos */}
