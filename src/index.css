@@ -13,31 +13,13 @@ html, body, #root { height: 100%; overflow: hidden; }
 body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: antialiased; }
 
 .app-watermark-banner {
+  --app-watermark-ink: 148, 163, 184;
   position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(100%, 1120px);
-  padding: clamp(1rem, 0.8rem + 1vw, 1.7rem)
-    clamp(1.5rem, 1rem + 5vw, 4.5rem)
-    clamp(0.85rem, 0.6rem + 0.8vw, 1.35rem);
-  display: grid;
-  place-items: center;
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: clamp(0.24em, 0.18em + 0.35vw, 0.36em);
-  line-height: 1.05;
-  color: rgba(241, 245, 249, 0.82);
-  z-index: 4000;
+  inset: 0;
+  z-index: -1;
   pointer-events: none;
   user-select: none;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.6) 100%);
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-bottom-left-radius: 32px;
-  border-bottom-right-radius: 32px;
-  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  display: block;
   overflow: hidden;
   isolation: isolate;
 }
@@ -45,122 +27,110 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 .app-watermark-banner::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 160% at 50% -30%, rgba(59, 130, 246, 0.28), transparent 65%);
-  opacity: 0.85;
-  z-index: 0;
+  inset: -22% -18% -18% -18%;
+  background: radial-gradient(
+    circle at 50% 36%,
+    rgba(var(--app-watermark-ink), 0.12) 0%,
+    rgba(var(--app-watermark-ink), 0.05) 32%,
+    transparent 68%
+  );
+  transform: rotate(-18deg);
+  filter: blur(38px);
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
 }
 
 .app-watermark-banner::after {
   content: "";
   position: absolute;
-  inset-inline: 8%;
-  bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.75), rgba(56, 189, 248, 0.55), transparent);
-  opacity: 0.65;
-  z-index: 1;
-}
-
-.app-watermark-banner__glow,
-.app-watermark-banner__text {
-  position: relative;
-  z-index: 2;
-  font-weight: 900;
-  letter-spacing: inherit;
-}
-
-.app-watermark-banner__glow {
-  font-size: clamp(2.8rem, 1.7rem + 5.6vw, 6.6rem);
-  color: rgba(129, 140, 248, 0.12);
-  transform: translateY(6px);
-  filter: blur(0.6px);
-  text-shadow:
-    0 0 40px rgba(56, 189, 248, 0.35),
-    0 0 82px rgba(99, 102, 241, 0.45);
+  inset: -12%;
+  background: repeating-linear-gradient(
+    -18deg,
+    rgba(var(--app-watermark-ink), 0.028) 0 9px,
+    transparent 9px 56px
+  );
+  opacity: 0.12;
+  mix-blend-mode: soft-light;
 }
 
 .app-watermark-banner__text {
-  font-size: clamp(1.7rem, 1.2rem + 3.5vw, 4.2rem);
-  background: linear-gradient(90deg, rgba(165, 180, 252, 0.95), rgba(129, 140, 248, 0.95), rgba(96, 165, 250, 0.95));
-  color: transparent;
-  -webkit-background-clip: text;
-  background-clip: text;
-  text-shadow:
-    0 10px 32px rgba(15, 23, 42, 0.55),
-    0 4px 14px rgba(15, 23, 42, 0.45);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-size: clamp(3.8rem, 15vw, 18rem);
+  color: rgba(var(--app-watermark-ink), 0.09);
+  mix-blend-mode: soft-light;
+  text-rendering: optimizeLegibility;
+  filter: blur(0.35px);
+}
+
+.app-watermark-banner__text--shadow {
+  transform: translate(-50%, -50%) rotate(-18deg) translateY(16%);
+  font-size: clamp(5rem, 20vw, 22rem);
+  letter-spacing: 0.48em;
+  color: rgba(var(--app-watermark-ink), 0.05);
+  filter: blur(7px);
 }
 
 .light .app-watermark-banner {
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88) 0%, rgba(226, 232, 240, 0.72) 100%);
-  border-color: rgba(15, 23, 42, 0.14);
-  box-shadow: 0 20px 44px rgba(148, 163, 184, 0.35);
-  color: rgba(30, 41, 59, 0.78);
+  --app-watermark-ink: 71, 85, 105;
 }
 
-.light .app-watermark-banner::before {
-  background: radial-gradient(140% 160% at 50% -40%, rgba(14, 165, 233, 0.22), transparent 65%);
-  opacity: 0.9;
-}
-
-.light .app-watermark-banner::after {
-  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.55), rgba(129, 140, 248, 0.55), transparent);
-  opacity: 0.5;
-}
-
-.light .app-watermark-banner__glow {
-  color: rgba(51, 65, 85, 0.14);
-  text-shadow:
-    0 0 36px rgba(94, 234, 212, 0.25),
-    0 0 76px rgba(148, 163, 184, 0.4);
+.light .app-watermark-banner::before,
+.light .app-watermark-banner::after,
+.light .app-watermark-banner__text,
+.light .app-watermark-banner__text--shadow {
+  mix-blend-mode: multiply;
 }
 
 .light .app-watermark-banner__text {
-  background: linear-gradient(90deg, rgba(30, 41, 59, 0.94), rgba(51, 65, 85, 0.94), rgba(30, 41, 59, 0.9));
-  text-shadow:
-    0 10px 30px rgba(148, 163, 184, 0.4),
-    0 4px 12px rgba(148, 163, 184, 0.35);
+  color: rgba(var(--app-watermark-ink), 0.08);
 }
 
-@media (max-width: 1024px) {
-  .app-watermark-banner {
-    width: min(96%, 960px);
-    letter-spacing: clamp(0.2em, 0.14em + 0.3vw, 0.3em);
+.light .app-watermark-banner__text--shadow {
+  color: rgba(var(--app-watermark-ink), 0.045);
+}
+
+@media (max-width: 960px) {
+  .app-watermark-banner__text {
+    letter-spacing: 0.34em;
+    font-size: clamp(3.4rem, 18vw, 14rem);
+  }
+
+  .app-watermark-banner__text--shadow {
+    letter-spacing: 0.4em;
+    font-size: clamp(4.5rem, 24vw, 18rem);
   }
 }
 
-@media (max-width: 720px) {
-  .app-watermark-banner {
-    padding-inline: clamp(1.25rem, 1rem + 2vw, 2.5rem);
-    border-bottom-left-radius: 24px;
-    border-bottom-right-radius: 24px;
-  }
-
-  .app-watermark-banner__glow {
-    font-size: clamp(2.4rem, 2rem + 4vw, 4.6rem);
-    transform: translateY(8px);
+@media (max-width: 640px) {
+  .app-watermark-banner::after {
+    opacity: 0.09;
   }
 
   .app-watermark-banner__text {
-    font-size: clamp(1.45rem, 1.1rem + 4vw, 3.2rem);
+    letter-spacing: 0.28em;
+    font-size: clamp(2.8rem, 24vw, 9rem);
+  }
+
+  .app-watermark-banner__text--shadow {
+    letter-spacing: 0.32em;
+    font-size: clamp(3.4rem, 30vw, 11rem);
   }
 }
 
-@media (max-width: 520px) {
-  .app-watermark-banner {
-    padding-block: 0.85rem 0.65rem;
-    letter-spacing: clamp(0.12em, 0.08em + 0.3vw, 0.22em);
-  }
-
-  .app-watermark-banner__glow {
-    font-size: clamp(2rem, 1.5rem + 6vw, 3.8rem);
-  }
-
+@media (max-width: 420px) {
   .app-watermark-banner__text {
-    font-size: clamp(1.2rem, 1rem + 4vw, 2.6rem);
-    text-shadow:
-      0 6px 20px rgba(15, 23, 42, 0.55),
-      0 3px 10px rgba(15, 23, 42, 0.45);
+    letter-spacing: 0.22em;
+  }
+
+  .app-watermark-banner__text--shadow {
+    letter-spacing: 0.26em;
   }
 }
 
