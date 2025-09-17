@@ -1186,8 +1186,15 @@ const TournamentCard: React.FC<{
 };
 
 /* ====================== App raíz ====================== */
+const WatermarkBanner: React.FC = () => (
+  <div className="app-watermark-banner" aria-hidden="true">
+    PRODUCTO DEMO ROCKETFOX
+  </div>
+);
+
 export const App: React.FC = () => (
   <ErrorBoundary>
+    <WatermarkBanner />
     <MasterPanel />
   </ErrorBoundary>
 );

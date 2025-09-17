@@ -12,6 +12,30 @@
 html, body, #root { height: 100%; overflow: hidden; }
 body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: antialiased; }
 
+.app-watermark-banner {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 4000;
+  padding: 1.1rem 1rem 0.85rem;
+  text-align: center;
+  font-size: clamp(1.75rem, 1.1rem + 3vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  text-shadow: 0 0 18px rgba(99, 102, 241, 0.5);
+  pointer-events: none;
+  user-select: none;
+  mix-blend-mode: screen;
+}
+
+.light .app-watermark-banner {
+  color: rgba(15, 23, 42, 0.32);
+  text-shadow: 0 0 16px rgba(79, 70, 229, 0.25);
+  mix-blend-mode: multiply;
+}
+
 /* Colores del sistema para formularios/scrollbars */
 :root { color-scheme: dark; }
 .light { color-scheme: light; }
