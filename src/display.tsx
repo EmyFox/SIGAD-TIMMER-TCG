@@ -77,11 +77,19 @@ const IconLayers = (p: React.SVGProps<SVGSVGElement>) => (
     <path d="M3 12l9 5 9-5M3 16l9 5 9-5" stroke="currentColor" strokeWidth="1.5" opacity=".6" />
   </svg>
 );
+const IconNote = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path d="M6 3h9l3 3v13a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M15 3v3h3" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M8 10h8M8 14h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
 
 /* ==================== Helpers ==================== */
 const pad2 = (n: number) => n.toString().padStart(2, "0");
 const fmtClock = (tf: TimeFmt) => (tf === "12" ? "hh:mm A" : "HH:mm");
 const getParam = (k: string) => new URLSearchParams(location.search).get(k);
+const pluralize = (value: number, singular: string, plural: string) => (value === 1 ? singular : plural);
 const formatSplit = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(total / 3600);
@@ -206,6 +214,142 @@ const TimeBlock = ({
     </div>
   </div>
 );
+
+const makeRoundMarkers = (total: number) => {
+  if (total <= 0) return [] as number[];
+  if (total <= 10) return Array.from({ length: total }, (_, i) => i + 1);
+  const slots = 12;
+  const step = (total - 1) / Math.max(1, slots - 1);
+  const values = new Set<number>();
+  for (let i = 0; i < slots; i++) {
+    const value = Math.round(i * step) + 1;
+    values.add(Math.min(total, Math.max(1, value)));
+  }
+  values.add(1);
+  values.add(total);
+  return Array.from(values).sort((a, b) => a - b);
+};
+
+type MetaAccent = "indigo" | "amber" | "emerald" | "rose" | "cyan" | "violet";
+
+const MetaCard: React.FC<{
+  accent: MetaAccent;
+  label: string;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  icon: React.ReactNode;
+  className?: string;
+}> = ({ accent, label, title, description, icon, className }) => {
+  const classes = ["meta-card"];
+  if (className) classes.push(className);
+  return (
+    <div className={classes.join(" ")} data-accent={accent}>
+      <div className="meta-card__icon" aria-hidden>
+        {icon}
+      </div>
+      <div className="meta-card__label">{label}</div>
+      {title ? <div className="meta-card__title">{title}</div> : null}
+      {description ? <div className="meta-card__description">{description}</div> : null}
+    </div>
+  );
+};
+
+const NotesCard: React.FC<{ text: string; className?: string }> = ({ text, className }) => (
+  <MetaCard
+    accent="violet"
+    label="Notas del organizador"
+    description={text}
+    icon={<IconNote className="size-5" />}
+    className={className ? `meta-card--note ${className}` : "meta-card--note"}
+  />
+);
+
+const RoundTimeline: React.FC<{
+  total: number;
+  completed: number;
+  currentIndex: number;
+  mode: DisplayTournament["timer"]["mode"];
+  accent: "indigo" | "amber";
+  stateLabel: string;
+  isLight: boolean;
+  roundsLeft: number;
+}> = ({ total, completed, currentIndex, mode, accent, stateLabel, isLight, roundsLeft }) => {
+  const markers = useMemo(() => makeRoundMarkers(total), [total]);
+  if (total <= 1 || markers.length === 0) return null;
+
+  const pointerRound =
+    stateLabel === "Terminado"
+      ? total
+      : mode === "round"
+      ? Math.max(1, Math.min(total, currentIndex || completed + 1))
+      : Math.min(total, completed);
+
+  const fillPct = total > 0 ? (Math.min(total, pointerRound) / total) * 100 : 0;
+  const pointerPct = total > 0 ? (Math.min(total, pointerRound) / total) * 100 : 0;
+  const pointerPosition = Math.max(2, Math.min(98, pointerPct));
+
+  const showCurrent = stateLabel !== "Terminado" && mode === "round";
+  const currentRound = showCurrent ? Math.max(1, Math.min(total, currentIndex || completed + 1)) : null;
+
+  const label =
+    stateLabel === "Terminado"
+      ? "Finalizado"
+      : mode === "break"
+      ? "Break"
+      : mode === "round"
+      ? `Ronda ${currentRound ?? 1}`
+      : completed === 0
+      ? "Listo"
+      : "Pausado";
+
+  const colors =
+    accent === "amber"
+      ? ["#fbbf24", "#fb7185"]
+      : isLight
+      ? ["#0ea5e9", "#6366f1"]
+      : ["#00eaff", "#8b5cf6"];
+
+  const completedLabel = `${completed} ${pluralize(completed, "ronda completada", "rondas completadas")}`;
+  const remainingLabel =
+    stateLabel === "Terminado"
+      ? "Torneo finalizado"
+      : roundsLeft > 0
+      ? `${roundsLeft} ${pluralize(roundsLeft, "ronda restante", "rondas restantes")}`
+      : "Última etapa";
+
+  const timelineStyle = {
+    ["--timeline-c1" as any]: colors[0],
+    ["--timeline-c2" as any]: colors[1],
+  } as React.CSSProperties;
+
+  return (
+    <section className="round-timeline" style={timelineStyle} aria-label="Progreso de rondas">
+      <div className="round-timeline__track" aria-hidden>
+        <div className="round-timeline__fill" style={{ width: `${fillPct}%` }} />
+        <span className="round-timeline__pin" style={{ left: `${pointerPosition}%` }}>
+          <span className="round-timeline__pin-dot" />
+          <span className="round-timeline__pin-label">{label}</span>
+        </span>
+      </div>
+      <div className="round-timeline__meta">
+        <span>{completedLabel}</span>
+        <span>{remainingLabel}</span>
+      </div>
+      <div className="round-timeline__chips" aria-hidden>
+        {markers.map((num) => {
+          const classes = ["round-chip"];
+          if (stateLabel === "Terminado" || num <= completed) classes.push("round-chip--done");
+          if (showCurrent && currentRound === num) classes.push("round-chip--current");
+          return (
+            <span key={num} className={classes.join(" ")} title={`Ronda ${num}`}>
+              R{num}
+            </span>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
 const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = ({
   count,
@@ -409,6 +553,7 @@ const Display: React.FC = () => {
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
   const schedule = active ? computeSchedule(active, timeFmt) : [];
+  const nextEvent = schedule[0];
 
   const progressPct = useMemo(() => {
     if (!active) return 0;
@@ -452,6 +597,19 @@ const Display: React.FC = () => {
 
   const accent: "indigo" | "amber" = active?.timer.mode === "break" ? "amber" : "indigo";
   const isLight = active?.theme === "light";
+  const inSomething = active ? active.timer.target !== null && (active.timer.running || active.timer.remainingMs > 0) : false;
+  const inRoundStage = inSomething && active?.timer.mode === "round";
+  const currentIndex = active ? (inRoundStage ? active.roundsCompleted + 1 : active.roundsCompleted) : 0;
+  const roundsLeftAfterCurrent =
+    active ? Math.max(0, active.roundsTotal - (inRoundStage ? active.roundsCompleted + 1 : active.roundsCompleted)) : 0;
+  const totalRounds = active?.roundsTotal ?? 0;
+  const completedRounds = active?.roundsCompleted ?? 0;
+  const notes = active?.notes?.trim() ?? "";
+  const roundsSummaryDescription = active
+    ? `${completedRounds} ${pluralize(completedRounds, "ronda completada", "rondas completadas")} de ${totalRounds} ${pluralize(totalRounds, "programada", "programadas")}${
+        active.breakEnabled ? ` • Breaks de ${active.breakMinutes} min en agenda.` : "."
+      }`
+    : "";
 
   const pages = useMemo(() => chunk(tournaments, 3), [tournaments]);
   useEffect(() => {
@@ -630,6 +788,72 @@ const Display: React.FC = () => {
                   {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
                 </span>
               </StatCard>
+            </div>
+
+            {active.roundsTotal > 1 && (
+              <div className="mb-6">
+                <RoundTimeline
+                  total={active.roundsTotal}
+                  completed={active.roundsCompleted}
+                  currentIndex={currentIndex}
+                  mode={active.timer.mode}
+                  accent={accent}
+                  stateLabel={stateLabel}
+                  isLight={!!isLight}
+                  roundsLeft={roundsLeftAfterCurrent}
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <MetaCard
+                accent={active.autoStartNext ? "emerald" : "rose"}
+                label="Auto inicio"
+                title={active.autoStartNext ? "Activado" : "Manual"}
+                description={
+                  active.autoStartNext
+                    ? "La siguiente ronda comenzará automáticamente al finalizar el conteo."
+                    : "El staff inicia la siguiente ronda desde el panel de control."
+                }
+                icon={<IconBolt className="size-5" />}
+              />
+              <MetaCard
+                accent={accent}
+                label="Próximo hito"
+                title={
+                  nextEvent
+                    ? nextEvent.time
+                    : stateLabel === "Terminado"
+                    ? "Torneo cerrado"
+                    : active.timer.target
+                    ? dayjs(active.timer.target).format(fmtClock(timeFmt))
+                    : "Pendiente"
+                }
+                description={
+                  nextEvent
+                    ? nextEvent.label
+                    : stateLabel === "Terminado"
+                    ? "Celebrando a los ganadores."
+                    : active.timer.mode === "break"
+                    ? "Break en progreso."
+                    : "Configura el siguiente evento para mostrarlo aquí."
+                }
+                icon={<IconClock className="size-5" />}
+              />
+              <MetaCard
+                accent="cyan"
+                label="Resumen de rondas"
+                title={
+                  roundsLeftAfterCurrent > 0
+                    ? `${roundsLeftAfterCurrent} ${pluralize(roundsLeftAfterCurrent, "ronda por jugar", "rondas por jugar")}`
+                    : stateLabel === "Terminado"
+                    ? "Torneo finalizado"
+                    : "Última ronda"
+                }
+                description={roundsSummaryDescription}
+                icon={<IconTarget className="size-5" />}
+              />
+              {notes && <NotesCard text={notes} className="md:col-span-2 lg:col-span-3" />}
             </div>
 
             {/* Progreso */}
