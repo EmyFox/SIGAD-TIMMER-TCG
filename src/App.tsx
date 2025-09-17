@@ -1188,7 +1188,8 @@ const TournamentCard: React.FC<{
 /* ====================== App raíz ====================== */
 const WatermarkBanner: React.FC = () => (
   <div className="app-watermark-banner" aria-hidden="true">
-    PRODUCTO DEMO ROCKETFOX
+    <span className="app-watermark-banner__glow">PRODUCTO DEMO ROCKETFOX</span>
+    <span className="app-watermark-banner__text">PRODUCTO DEMO ROCKETFOX</span>
   </div>
 );
 

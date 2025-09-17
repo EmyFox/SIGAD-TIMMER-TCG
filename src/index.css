@@ -14,26 +14,154 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 
 .app-watermark-banner {
   position: fixed;
-  inset-inline: 0;
   top: 0;
-  z-index: 4000;
-  padding: 1.1rem 1rem 0.85rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(100%, 1120px);
+  padding: clamp(1rem, 0.8rem + 1vw, 1.7rem)
+    clamp(1.5rem, 1rem + 5vw, 4.5rem)
+    clamp(0.85rem, 0.6rem + 0.8vw, 1.35rem);
+  display: grid;
+  place-items: center;
   text-align: center;
-  font-size: clamp(1.75rem, 1.1rem + 3vw, 4rem);
-  font-weight: 900;
-  letter-spacing: 0.35em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.28);
-  text-shadow: 0 0 18px rgba(99, 102, 241, 0.5);
+  letter-spacing: clamp(0.24em, 0.18em + 0.35vw, 0.36em);
+  line-height: 1.05;
+  color: rgba(241, 245, 249, 0.82);
+  z-index: 4000;
   pointer-events: none;
   user-select: none;
-  mix-blend-mode: screen;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-bottom-left-radius: 32px;
+  border-bottom-right-radius: 32px;
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.app-watermark-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 160% at 50% -30%, rgba(59, 130, 246, 0.28), transparent 65%);
+  opacity: 0.85;
+  z-index: 0;
+}
+
+.app-watermark-banner::after {
+  content: "";
+  position: absolute;
+  inset-inline: 8%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.75), rgba(56, 189, 248, 0.55), transparent);
+  opacity: 0.65;
+  z-index: 1;
+}
+
+.app-watermark-banner__glow,
+.app-watermark-banner__text {
+  position: relative;
+  z-index: 2;
+  font-weight: 900;
+  letter-spacing: inherit;
+}
+
+.app-watermark-banner__glow {
+  font-size: clamp(2.8rem, 1.7rem + 5.6vw, 6.6rem);
+  color: rgba(129, 140, 248, 0.12);
+  transform: translateY(6px);
+  filter: blur(0.6px);
+  text-shadow:
+    0 0 40px rgba(56, 189, 248, 0.35),
+    0 0 82px rgba(99, 102, 241, 0.45);
+}
+
+.app-watermark-banner__text {
+  font-size: clamp(1.7rem, 1.2rem + 3.5vw, 4.2rem);
+  background: linear-gradient(90deg, rgba(165, 180, 252, 0.95), rgba(129, 140, 248, 0.95), rgba(96, 165, 250, 0.95));
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow:
+    0 10px 32px rgba(15, 23, 42, 0.55),
+    0 4px 14px rgba(15, 23, 42, 0.45);
 }
 
 .light .app-watermark-banner {
-  color: rgba(15, 23, 42, 0.32);
-  text-shadow: 0 0 16px rgba(79, 70, 229, 0.25);
-  mix-blend-mode: multiply;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88) 0%, rgba(226, 232, 240, 0.72) 100%);
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 20px 44px rgba(148, 163, 184, 0.35);
+  color: rgba(30, 41, 59, 0.78);
+}
+
+.light .app-watermark-banner::before {
+  background: radial-gradient(140% 160% at 50% -40%, rgba(14, 165, 233, 0.22), transparent 65%);
+  opacity: 0.9;
+}
+
+.light .app-watermark-banner::after {
+  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.55), rgba(129, 140, 248, 0.55), transparent);
+  opacity: 0.5;
+}
+
+.light .app-watermark-banner__glow {
+  color: rgba(51, 65, 85, 0.14);
+  text-shadow:
+    0 0 36px rgba(94, 234, 212, 0.25),
+    0 0 76px rgba(148, 163, 184, 0.4);
+}
+
+.light .app-watermark-banner__text {
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.94), rgba(51, 65, 85, 0.94), rgba(30, 41, 59, 0.9));
+  text-shadow:
+    0 10px 30px rgba(148, 163, 184, 0.4),
+    0 4px 12px rgba(148, 163, 184, 0.35);
+}
+
+@media (max-width: 1024px) {
+  .app-watermark-banner {
+    width: min(96%, 960px);
+    letter-spacing: clamp(0.2em, 0.14em + 0.3vw, 0.3em);
+  }
+}
+
+@media (max-width: 720px) {
+  .app-watermark-banner {
+    padding-inline: clamp(1.25rem, 1rem + 2vw, 2.5rem);
+    border-bottom-left-radius: 24px;
+    border-bottom-right-radius: 24px;
+  }
+
+  .app-watermark-banner__glow {
+    font-size: clamp(2.4rem, 2rem + 4vw, 4.6rem);
+    transform: translateY(8px);
+  }
+
+  .app-watermark-banner__text {
+    font-size: clamp(1.45rem, 1.1rem + 4vw, 3.2rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .app-watermark-banner {
+    padding-block: 0.85rem 0.65rem;
+    letter-spacing: clamp(0.12em, 0.08em + 0.3vw, 0.22em);
+  }
+
+  .app-watermark-banner__glow {
+    font-size: clamp(2rem, 1.5rem + 6vw, 3.8rem);
+  }
+
+  .app-watermark-banner__text {
+    font-size: clamp(1.2rem, 1rem + 4vw, 2.6rem);
+    text-shadow:
+      0 6px 20px rgba(15, 23, 42, 0.55),
+      0 3px 10px rgba(15, 23, 42, 0.45);
+  }
 }
 
 /* Colores del sistema para formularios/scrollbars */
