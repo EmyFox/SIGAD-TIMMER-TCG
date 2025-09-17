@@ -1,0 +1,18 @@
+# Ensure consistent Git behavior across platforms
+* text=auto eol=lf
+
+# Treat common binary assets properly
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg -text
+*.ico binary
+
+# Keep line endings stable in Windows editors too
+*.bat eol=crlf
+*.cmd eol=crlf
+
+# Linguist tweaks (optional)
+*.tsx linguist-language=TypeScript
+*.ts  linguist-language=TypeScript

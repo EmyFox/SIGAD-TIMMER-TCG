@@ -1,0 +1,6 @@
+{
+  "users": [
+    { "email": "richu@sigad.mx", "pin": "1234", "name": "Richu" },
+    { "email": "romo@sigad.mx",  "pin": "1234", "name": "Romo" }
+  ]
+}
