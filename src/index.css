@@ -328,20 +328,23 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.65);
 }
 .progress-beam__fill{
-  position:absolute; inset:0; width: calc(var(--progress) * 1%);
+  position:absolute; inset:0; width:100%;
+  transform-origin:left center;
+  transform: scaleX(var(--progress-ratio, 0));
   background: linear-gradient(120deg, var(--accent-start), var(--accent-mid), var(--accent-end));
   border-radius:inherit; box-shadow: 0 0 36px color-mix(in srgb, var(--accent-mid), transparent 35%);
-  transition: width var(--hud-progress-speed) var(--hud-progress-ease);
+  transition: transform var(--hud-progress-speed) var(--hud-progress-ease);
+  will-change: transform;
 }
 .progress-beam__glow{
   position:absolute; inset:-30% -60%; pointer-events:none;
   background: radial-gradient(55% 70% at 0% 50%, color-mix(in srgb, var(--accent-end), transparent 40%), transparent 70%);
-  opacity:.65; transform: translateX(calc(var(--progress) * 1%));
+  opacity:.65; transform: translateX(calc(var(--progress-ratio, 0) * 100%));
   transition: transform var(--hud-progress-speed) var(--hud-progress-ease);
 }
 .progress-beam__spark{
   position:absolute; top:-16px; bottom:-16px; left:0; width:120px; pointer-events:none;
-  transform: translateX(calc(var(--progress) * 1% - 60px));
+  transform: translateX(calc(var(--progress-ratio, 0) * 100% - 60px));
   background: radial-gradient(60px 60px at 20% 50%, rgba(255,255,255,.3), transparent 60%), radial-gradient(120px 120px at 0% 50%, color-mix(in srgb, var(--accent-end), transparent 15%), transparent 70%);
   mix-blend-mode: screen; opacity:.75; filter: blur(6px);
   transition: transform var(--hud-progress-speed) var(--hud-progress-ease);
@@ -350,7 +353,7 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
   position:absolute; inset:-12px -20px; pointer-events:none;
   background: linear-gradient(120deg, rgba(255,255,255,.35), transparent 45%);
   mix-blend-mode: screen; opacity:.35;
-  transform: translateX(calc(var(--progress) * 1% - 20px));
+  transform: translateX(calc(var(--progress-ratio, 0) * 100% - 20px));
   transition: transform var(--hud-progress-speed) var(--hud-progress-ease);
 }
 .progress-beam--static .progress-beam__fill,
@@ -505,6 +508,33 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 .schedule-chip__icon{ width:36px; height:36px; border-radius:12px; display:inline-flex; align-items:center; justify-content:center; background: linear-gradient(135deg, rgba(14,165,233,.42), rgba(99,102,241,.42)); color:#fff; box-shadow: 0 10px 22px rgba(99,102,241,.24); }
 .schedule-chip--active .schedule-chip__icon{ background: linear-gradient(135deg, rgba(236,72,153,.6), rgba(168,85,247,.6)); box-shadow: 0 14px 32px rgba(236,72,153,.32); }
 .light .schedule-chip__icon{ background: linear-gradient(135deg, rgba(14,165,233,.7), rgba(99,102,241,.7)); }
+.schedule-chip--break:not(.schedule-chip--active){
+  background: color-mix(in srgb, rgba(253,186,116,.22), var(--surface-2) 75%);
+  border-color: color-mix(in srgb, rgba(253,186,116,.45), transparent 68%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), 0 8px 18px rgba(253,186,116,.24);
+}
+.light .schedule-chip--break:not(.schedule-chip--active){
+  background: color-mix(in srgb, rgba(253,186,116,.32), white 78%);
+  border-color: rgba(253,186,116,.45);
+}
+.schedule-chip--break .schedule-chip__icon{
+  background: linear-gradient(135deg, rgba(251,191,36,.68), rgba(251,113,133,.56));
+  box-shadow: 0 10px 24px rgba(251,191,36,.28);
+}
+.schedule-chip--final:not(.schedule-chip--active){
+  background: color-mix(in srgb, rgba(253,224,71,.26), var(--surface-2) 68%);
+  border-color: color-mix(in srgb, rgba(253,224,71,.45), transparent 68%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), 0 10px 22px rgba(253,224,71,.24);
+}
+.light .schedule-chip--final:not(.schedule-chip--active){
+  background: color-mix(in srgb, rgba(253,224,71,.36), white 76%);
+  border-color: rgba(253,224,71,.45);
+}
+.schedule-chip--final .schedule-chip__icon{
+  background: linear-gradient(135deg, rgba(234,179,8,.78), rgba(253,224,71,.68));
+  color:#2f2a16;
+  box-shadow: 0 10px 24px rgba(234,179,8,.32);
+}
 .schedule-chip__content{ display:flex; flex-direction:column; gap:2px; }
 .schedule-chip__label{ font-size:.8rem; color: var(--text-2); letter-spacing:.02em; text-transform:capitalize; }
 .light .schedule-chip__label{ color: color-mix(in srgb, var(--text-2), black 10%); }

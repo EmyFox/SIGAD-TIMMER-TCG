@@ -13,6 +13,13 @@ import { BrandLogo } from "./BrandLogo";
 
 type HudDensity = "compact" | "standard" | "expanded";
 type HudScale = number;
+type ScheduleKind = "round" | "break" | "final";
+
+interface ScheduleItem {
+  label: string;
+  time: string;
+  kind: ScheduleKind;
+}
 
 const HUD_DENSITY_KEY = "sigad-hud-density";
 const HUD_SCALE_KEY = "sigad-hud-scale";
@@ -236,9 +243,44 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+const timerEquals = (a: DisplayTournament["timer"], b: DisplayTournament["timer"]) =>
+  a.target === b.target &&
+  a.remainingMs === b.remainingMs &&
+  a.running === b.running &&
+  a.label === b.label &&
+  a.mode === b.mode;
+
+function tournamentsEqual(prev: DisplayTournament[], next: DisplayTournament[]) {
+  if (prev === next) return true;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (!b) return false;
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.game !== b.game ||
+      a.roundsTotal !== b.roundsTotal ||
+      a.roundsCompleted !== b.roundsCompleted ||
+      a.roundMinutes !== b.roundMinutes ||
+      a.breakEnabled !== b.breakEnabled ||
+      a.breakMinutes !== b.breakMinutes ||
+      a.autoStartNext !== b.autoStartNext ||
+      (a.nextRoundMinutes ?? null) !== (b.nextRoundMinutes ?? null) ||
+      a.createdAt !== b.createdAt ||
+      a.theme !== b.theme ||
+      !timerEquals(a.timer, b.timer)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Itinerario (máx 3) — FIX incluido */
-function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
-  const items: { label: string; time: string }[] = [];
+function computeSchedule(t: DisplayTournament, tf: TimeFmt): ScheduleItem[] {
+  const items: ScheduleItem[] = [];
   let base = Date.now();
 
   const inSomething =
@@ -248,12 +290,20 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
 
   const remaining = inSomething ? Math.max(0, (t.timer.target ?? 0) - base) : 0;
   if (remaining > 0) {
+    const finishingIndex = inRound ? currentIndex : currentIndex + 1;
+    const finishingKind: ScheduleKind =
+      t.timer.mode === "break"
+        ? "break"
+        : finishingIndex >= t.roundsTotal
+        ? "final"
+        : "round";
     items.push({
       label:
         t.timer.mode === "break"
           ? "Fin del descanso"
           : `Fin ronda ${inRound ? currentIndex : currentIndex + 1}`,
       time: dayjs(base + remaining).format(fmtClock(tf)),
+      kind: finishingKind,
     });
     base += remaining;
   }
@@ -262,12 +312,13 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
   for (let i = 1; i <= left; i++) {
     if (t.breakEnabled && t.breakMinutes > 0) {
       base += t.breakMinutes * 60_000;
-      items.push({ label: "Descanso", time: dayjs(base).format(fmtClock(tf)) });
+      items.push({ label: "Descanso", time: dayjs(base).format(fmtClock(tf)), kind: "break" });
     }
     base += t.roundMinutes * 60_000;
     items.push({
       label: `Fin ronda ${currentIndex + i}`,
       time: dayjs(base).format(fmtClock(tf)),
+      kind: currentIndex + i >= t.roundsTotal ? "final" : "round",
     });
   }
   return items.slice(0, 3);
@@ -324,24 +375,21 @@ const StatCard = ({ label, children, isLight, density }: StatCardProps) => {
   );
 };
 
-const TimeBlock = ({
-  value,
-  label,
-  accent,
-  isLight,
-  density,
-}: {
+interface TimeBlockProps {
   value: string;
   label: string;
   accent: "indigo" | "amber";
   isLight: boolean;
   density: HudDensity;
-}) => {
-  const paddingClass =
-    density === "compact"
-      ? "px-4 py-3 md:px-5 md:py-4"
-      : density === "expanded"
-      ? "px-7 py-6 md:px-8 md:py-7"
+}
+
+const TimeBlock = React.memo(
+  ({ value, label, accent, isLight, density }: TimeBlockProps) => {
+    const paddingClass =
+      density === "compact"
+        ? "px-4 py-3 md:px-5 md:py-4"
+        : density === "expanded"
+        ? "px-7 py-6 md:px-8 md:py-7"
       : "px-5 py-4 md:px-6 md:py-5";
   const numberClass =
     density === "compact"
@@ -383,8 +431,14 @@ const TimeBlock = ({
         </div>
       </div>
     </div>
-  );
-};
+  },
+  (prev, next) =>
+    prev.value === next.value &&
+    prev.label === next.label &&
+    prev.accent === next.accent &&
+    prev.isLight === next.isLight &&
+    prev.density === next.density
+);
 
 const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = ({
   count,
@@ -409,16 +463,17 @@ const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = (
   );
 };
 
-const BokehBackdrop: React.FC<{ isLight: boolean; disableFX: boolean }> = ({ isLight, disableFX }) => {
+const BokehBackdrop = React.memo(({ isLight, disableFX }: { isLight: boolean; disableFX: boolean }) => {
+  const nodes = useMemo(() => Array.from({ length: 5 }, (_, i) => i + 1), []);
   if (disableFX) return null;
   return (
     <div className={`hud-bokeh ${isLight ? "hud-bokeh--light" : ""}`} aria-hidden>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <span key={i} className={`hud-bokeh__item hud-bokeh__item--${i + 1}`} />
+      {nodes.map((idx) => (
+        <span key={idx} className={`hud-bokeh__item hud-bokeh__item--${idx}`} />
       ))}
     </div>
   );
-};
+});
 
 interface RoundTrackProps {
   total: number;
@@ -430,19 +485,12 @@ interface RoundTrackProps {
   density: HudDensity;
 }
 
-const RoundTrack: React.FC<RoundTrackProps> = ({
-  total,
-  current,
-  completed,
-  isLight,
-  accent,
-  stateLabel,
-  density,
-}) => {
-  const safeTotal = Math.max(1, total);
-  const safeCurrent = Math.min(safeTotal, Math.max(1, current));
-  const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
-  const maxDots = density === "expanded" ? 14 : density === "compact" ? 8 : 12;
+const RoundTrack = React.memo(
+  ({ total, current, completed, isLight, accent, stateLabel, density }: RoundTrackProps) => {
+    const safeTotal = Math.max(1, total);
+    const safeCurrent = Math.min(safeTotal, Math.max(1, current));
+    const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
+    const maxDots = density === "expanded" ? 14 : density === "compact" ? 8 : 12;
   let start = Math.max(1, safeCurrent - Math.floor(maxDots / 2));
   let end = Math.min(safeTotal, start + maxDots - 1);
   start = Math.max(1, end - maxDots + 1);
@@ -562,7 +610,16 @@ const RoundTrack: React.FC<RoundTrackProps> = ({
       {showCaption && <p className="round-track__caption">{description}</p>}
     </div>
   );
-};
+  },
+  (prev, next) =>
+    prev.total === next.total &&
+    prev.current === next.current &&
+    prev.completed === next.completed &&
+    prev.isLight === next.isLight &&
+    prev.accent === next.accent &&
+    prev.stateLabel === next.stateLabel &&
+    prev.density === next.density
+);
 
 interface ProgressPanelProps {
   isLight: boolean;
@@ -570,7 +627,7 @@ interface ProgressPanelProps {
   displayPct: number;
   transitionClass: string;
   stateLabel: string;
-  nextEvent: { label: string; time: string } | null;
+  nextEvent: ScheduleItem | null;
   remaining: number;
   mode: DisplayTournament["timer"]["mode"] | null;
   currentRound: number | null;
@@ -578,28 +635,31 @@ interface ProgressPanelProps {
   breakMinutes: number;
   breakEnabled: boolean;
   density: HudDensity;
+  fxDisabled: boolean;
 }
 
-const ProgressPanel: React.FC<ProgressPanelProps> = ({
-  isLight,
-  accent,
-  displayPct,
-  transitionClass,
-  stateLabel,
-  nextEvent,
-  remaining,
-  mode,
-  currentRound,
-  roundMinutes,
-  breakMinutes,
-  breakEnabled,
-  density,
-}) => {
-  const palette = useMemo(() => {
-    if (accent === "amber") {
-      return { start: "#facc15", mid: "#fb923c", end: "#f43f5e" };
-    }
-    if (isLight) {
+const ProgressPanel = React.memo(
+  ({
+    isLight,
+    accent,
+    displayPct,
+    transitionClass,
+    stateLabel,
+    nextEvent,
+    remaining,
+    mode,
+    currentRound,
+    roundMinutes,
+    breakMinutes,
+    breakEnabled,
+    density,
+    fxDisabled,
+  }: ProgressPanelProps) => {
+    const palette = useMemo(() => {
+      if (accent === "amber") {
+        return { start: "#facc15", mid: "#fb923c", end: "#f43f5e" };
+      }
+      if (isLight) {
       return { start: "#38bdf8", mid: "#6366f1", end: "#a855f7" };
     }
     return { start: "#22d3ee", mid: "#6366f1", end: "#c084fc" };
@@ -633,6 +693,13 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
   const paceSecondary = isBreak ? "duración del descanso" : "duración de la ronda";
   const nextPrimary = nextEvent ? nextEvent.label : stateLabel;
   const nextSecondary = nextEvent ? nextEvent.time : "seguimiento en vivo";
+  const nextIcon = nextEvent
+    ? nextEvent.kind === "break"
+      ? <IconCoffee className="size-4" />
+      : nextEvent.kind === "final"
+      ? <IconTrophy className="size-4" />
+      : <IconFlag className="size-4" />
+    : <IconTarget className="size-4" />;
 
   const accentStyle = useMemo(
     () =>
@@ -641,12 +708,14 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
         ["--accent-mid" as any]: palette.mid,
         ["--accent-end" as any]: palette.end,
         ["--progress" as any]: displayPct,
+        ["--progress-ratio" as any]: Math.max(0, Math.min(1, displayPct / 100)),
       }) as React.CSSProperties,
     [palette.end, palette.mid, palette.start, displayPct]
   );
 
-  const freezeMotion = transitionClass === "no-transition";
-  const fillMotionClass = freezeMotion ? "no-transition" : "transition-width";
+  const freezeMotion = transitionClass === "no-transition" || fxDisabled;
+  const fillMotionClass = freezeMotion ? "no-transition" : "";
+  const showBeamFX = !fxDisabled;
 
   const densityClass =
     density === "compact"
@@ -684,9 +753,13 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
       <div className="progress-panel__meter">
         <div className={["progress-beam", freezeMotion ? "progress-beam--static" : ""].join(" ")}>
           <div className={["progress-beam__fill", fillMotionClass].join(" ")} />
-          <span className={["progress-beam__glow", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
-          <span className={["progress-beam__spark", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
-          <span className={["progress-beam__shine", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+          {showBeamFX && (
+            <>
+              <span className={["progress-beam__glow", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+              <span className={["progress-beam__spark", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+              <span className={["progress-beam__shine", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+            </>
+          )}
         </div>
         <div className="progress-panel__scale" aria-hidden>
           {Array.from({ length: 5 }).map((_, idx) => (
@@ -718,7 +791,7 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
         </div>
         <div className="progress-panel__fact progress-panel__fact--wide">
           <span className="progress-panel__factIcon" aria-hidden>
-            <IconTarget className="size-4" />
+            {nextIcon}
           </span>
           <span>
             <strong>{nextPrimary}</strong>
@@ -727,8 +800,26 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
         </div>
       </div>
     </div>
-  );
-};
+  },
+  (prev, next) =>
+    prev.isLight === next.isLight &&
+    prev.accent === next.accent &&
+    prev.displayPct === next.displayPct &&
+    prev.transitionClass === next.transitionClass &&
+    prev.stateLabel === next.stateLabel &&
+    prev.remaining === next.remaining &&
+    prev.mode === next.mode &&
+    prev.currentRound === next.currentRound &&
+    prev.roundMinutes === next.roundMinutes &&
+    prev.breakMinutes === next.breakMinutes &&
+    prev.breakEnabled === next.breakEnabled &&
+    prev.density === next.density &&
+    prev.fxDisabled === next.fxDisabled &&
+    ((prev.nextEvent === next.nextEvent && prev.nextEvent !== null) ||
+      (prev.nextEvent?.label === next.nextEvent?.label &&
+        prev.nextEvent?.time === next.nextEvent?.time &&
+        prev.nextEvent?.kind === next.nextEvent?.kind))
+);
 
 /* ==================== Super Header (solo visual) ==================== */
 const SuperHeader: React.FC<{
@@ -902,7 +993,35 @@ const Display: React.FC = () => {
   });
 
   const fixedId = useRef<string | null>(getParam("id"));
-  const disableFX = getParam("nofx") === "1";
+  const disableFxParam = getParam("nofx") === "1";
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const listener = (ev: MediaQueryListEvent) => setPrefersReducedMotion(ev.matches);
+      setPrefersReducedMotion(mq.matches);
+      if (typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", listener);
+        return () => mq.removeEventListener("change", listener);
+      }
+      const legacy = mq as MediaQueryList & { addListener?: (cb: (ev: MediaQueryListEvent) => void) => void; removeListener?: (cb: (ev: MediaQueryListEvent) => void) => void };
+      if (typeof legacy.addListener === "function") {
+        legacy.addListener(listener);
+        return () => legacy.removeListener?.(listener);
+      }
+    } catch {
+      return;
+    }
+  }, []);
+  const disableFX = disableFxParam || prefersReducedMotion;
 
   const [now, setNow] = useState<number>(Date.now());
   useEffect(() => {
@@ -958,9 +1077,10 @@ const Display: React.FC = () => {
 
   useEffect(() => {
     const unsub = subscribeDisplay((s) => {
-      setConnected(true);
-      setTimeFmt(s.timeFmt);
-      setTournaments(s.tournaments || []);
+      setConnected((prev) => (prev ? prev : true));
+      setTimeFmt((prev) => (prev === s.timeFmt ? prev : s.timeFmt));
+      const incoming = s.tournaments || [];
+      setTournaments((prev) => (tournamentsEqual(prev, incoming) ? prev : incoming));
     });
     return unsub;
   }, []);
@@ -978,7 +1098,7 @@ const Display: React.FC = () => {
     return Math.max(0, remainingMs || 0);
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
-  const schedule = active ? computeSchedule(active, timeFmt) : [];
+  const schedule: ScheduleItem[] = active ? computeSchedule(active, timeFmt) : [];
   const nextEvent = schedule[0] ?? null;
   const progressPct = useMemo(() => {
     if (!active) return 0;
@@ -997,19 +1117,24 @@ const Display: React.FC = () => {
   useEffect(() => {
     if (cycleKey !== lastKeyRef.current) {
       lastKeyRef.current = cycleKey;
-      setDisplayPct(0);
-      requestAnimationFrame(() => setDisplayPct(progressPct));
+      if (disableFX) {
+        setDisplayPct(progressPct);
+      } else {
+        setDisplayPct(0);
+        requestAnimationFrame(() => setDisplayPct(progressPct));
+      }
     } else {
-      setDisplayPct((prev) => Math.max(prev, progressPct));
+      setDisplayPct((prev) => (disableFX ? progressPct : Math.max(prev, progressPct)));
     }
-  }, [cycleKey, progressPct]);
+  }, [cycleKey, progressPct, disableFX]);
 
   const prevShownRef = useRef(0);
   const transitionClass = useMemo(() => {
+    if (disableFX) return "no-transition";
     const prev = prevShownRef.current;
     const increasing = displayPct >= prev;
     return increasing || displayPct === 0 ? "transition-width" : "no-transition";
-  }, [displayPct]);
+  }, [displayPct, disableFX]);
   useEffect(() => {
     prevShownRef.current = displayPct;
   }, [displayPct]);
@@ -1331,22 +1456,23 @@ const Display: React.FC = () => {
               </div>
 
               {active && (
-                <ProgressPanel
-                  isLight={!!isLight}
-                  accent={accent}
-                  displayPct={displayPct}
-                  transitionClass={transitionClass}
-                  stateLabel={stateLabel}
-                  nextEvent={nextEvent}
-                  remaining={remaining}
-                  mode={active.timer.mode ?? null}
-                  currentRound={trackData?.current ?? null}
-                  roundMinutes={active.roundMinutes}
-                  breakMinutes={active.breakMinutes}
-                  breakEnabled={active.breakEnabled}
-                  density={density}
-                />
-              )}
+              <ProgressPanel
+                isLight={!!isLight}
+                accent={accent}
+                displayPct={displayPct}
+                transitionClass={transitionClass}
+                stateLabel={stateLabel}
+                nextEvent={nextEvent}
+                remaining={remaining}
+                mode={active.timer.mode ?? null}
+                currentRound={trackData?.current ?? null}
+                roundMinutes={active.roundMinutes}
+                breakMinutes={active.breakMinutes}
+                breakEnabled={active.breakEnabled}
+                density={density}
+                fxDisabled={disableFX}
+              />
+            )}
 
               {(hasTrack || hasSchedule) && (
                 <div className={infoDeckClass}>
@@ -1389,10 +1515,22 @@ const Display: React.FC = () => {
                           {schedule.map((it, i) => (
                             <div
                               key={i}
-                              className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
+                              className={[
+                                "schedule-chip",
+                                i === 0 ? "schedule-chip--active" : "",
+                                `schedule-chip--${it.kind}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
                             >
                               <span className="schedule-chip__icon">
-                                <IconClock className="size-4" />
+                                {it.kind === "break" ? (
+                                  <IconCoffee className="size-4" />
+                                ) : it.kind === "final" ? (
+                                  <IconTrophy className="size-4" />
+                                ) : (
+                                  <IconFlag className="size-4" />
+                                )}
                               </span>
                               <div className="schedule-chip__content">
                                 <span className="schedule-chip__label">{it.label}</span>
