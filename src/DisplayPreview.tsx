@@ -6,6 +6,7 @@ type HudDensity = 'compact' | 'standard' | 'expanded';
 const HUD_DENSITIES: HudDensity[] = ['compact', 'standard', 'expanded'];
 const HUD_DENSITY_KEY_GLOBAL = 'sigad-hud-density';
 const HUD_SCALE_KEY_GLOBAL = 'sigad-hud-scale';
+const ZOOM_PRESETS = [70, 85, 100, 115, 130, 140];
 
 /**
  * DisplayPreview • v4.2
@@ -126,6 +127,10 @@ export const DisplayPreview: React.FC<{
       return { ...prev, [id]: next };
     });
     pushScale(id, next);
+  };
+  const nudgeScale = (id: string, delta: number) => {
+    const current = getScale(id);
+    updateScale(id, current + delta);
   };
   const getExpH  = (id: string) => clampOverlayH(expHeights[id] ?? DEFAULT_H_EXP);
   const setExpH  = (id: string, v: number) => setExpHeights(prev => ({ ...prev, [id]: clampOverlayH(v) }));
@@ -400,7 +405,7 @@ export const DisplayPreview: React.FC<{
                           className={hudButtonActive ? 'btn btn-light' : 'btn btn-outline-light'}
                           onClick={() => toggleHudMenu(t.id)}
                           ref={el => { hudButtonRefs.current[t.id] = el; }}
-                          title={`HUD: ${densityName} · ${hudScale}%`}
+                          title={`Zoom HUD: ${hudScale}% · ${densityName}`}
                           aria-expanded={hudButtonActive}
                           aria-controls={`hud-menu-${t.id}`}
                         >
@@ -409,6 +414,26 @@ export const DisplayPreview: React.FC<{
                         </button>
                         <button className="btn btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">
                           ⤢ <span className="d-none d-md-inline ms-1">Expandir</span>
+                        </button>
+                      </div>
+                      <div className="btn-group btn-group-sm ms-2" role="group" aria-label="Zoom del HUD">
+                        <button
+                          type="button"
+                          className="btn btn-outline-light"
+                          onClick={() => nudgeScale(t.id, -5)}
+                          title="Reducir zoom del HUD"
+                          aria-label="Reducir zoom del HUD"
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline-light"
+                          onClick={() => nudgeScale(t.id, 5)}
+                          title="Ampliar zoom del HUD"
+                          aria-label="Ampliar zoom del HUD"
+                        >
+                          +
                         </button>
                       </div>
                       {showHudMenuHere && (
@@ -447,25 +472,25 @@ export const DisplayPreview: React.FC<{
                           </div>
                           <div className="hud-config-menu__section">
                             <div className="hud-config-menu__label d-flex justify-content-between align-items-center">
-                              <span>Escala HUD</span>
+                              <span>Zoom del HUD</span>
                               <span className="badge text-bg-secondary">{hudScale}%</span>
                             </div>
                             <input
                               type="range"
-                              min={80}
-                              max={125}
+                              min={70}
+                              max={140}
                               step={5}
                               value={hudScale}
                               onChange={e => updateScale(t.id, Number(e.target.value))}
                               className="form-range hud-config-menu__slider"
-                              aria-label="Escala del HUD"
+                              aria-label="Zoom del HUD"
                             />
                             <div className="d-flex justify-content-between text-muted small">
-                              <span>Compacto</span>
-                              <span>Amplio</span>
+                              <span>Menos zoom</span>
+                              <span>Más zoom</span>
                             </div>
                             <div className="d-flex flex-wrap gap-2 mt-2">
-                              {[80, 90, 100, 110, 120].map(val => (
+                              {ZOOM_PRESETS.map(val => (
                                 <button
                                   key={val}
                                   type="button"
@@ -678,7 +703,7 @@ export const DisplayPreview: React.FC<{
                     >
                       <span>Vista {previewScalePct}%</span>
                       <span style={{ opacity: 0.85 }}>{fitLabel}</span>
-                      <span style={{ opacity: 0.7 }}>HUD {hudScale}% · {densityName}</span>
+                      <span style={{ opacity: 0.7 }}>Zoom {hudScale}% · {densityName}</span>
                     </div>
                   </div>
                 </div>
@@ -790,7 +815,7 @@ export const DisplayPreview: React.FC<{
                 </span>
 
                 <div className="d-flex align-items-center flex-wrap gap-2">
-                <span className="small text-secondary me-1">Vista {previewScalePct}% · HUD {hudScale}% · {densityName}</span>
+                <span className="small text-secondary me-1">Vista {previewScalePct}% · Zoom {hudScale}% · {densityName}</span>
 
                 {/* Grupo 1 */}
                 <div className="position-relative">
@@ -807,12 +832,32 @@ export const DisplayPreview: React.FC<{
                       className={overlayHudActive ? 'btn btn-light' : 'btn btn-outline-light'}
                       onClick={() => toggleHudMenu(t.id)}
                       ref={el => { hudButtonRefs.current[t.id] = el; }}
-                      title={`HUD: ${densityName} · ${hudScale}%`}
+                      title={`Zoom HUD: ${hudScale}% · ${densityName}`}
                       aria-expanded={overlayHudActive}
                       aria-controls={`hud-menu-${t.id}`}
                     >
                       {density === 'compact' ? '▣' : density === 'expanded' ? '▢' : '▤'}
                       <span className="d-none d-md-inline ms-1">HUD</span>
+                    </button>
+                  </div>
+                  <div className="btn-group btn-group-sm ms-2" role="group" aria-label="Zoom del HUD">
+                    <button
+                      type="button"
+                      className="btn btn-outline-light"
+                      onClick={() => nudgeScale(t.id, -5)}
+                      title="Reducir zoom del HUD"
+                      aria-label="Reducir zoom del HUD"
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-light"
+                      onClick={() => nudgeScale(t.id, 5)}
+                      title="Ampliar zoom del HUD"
+                      aria-label="Ampliar zoom del HUD"
+                    >
+                      +
                     </button>
                   </div>
                   {overlayHudActive && (
@@ -839,25 +884,25 @@ export const DisplayPreview: React.FC<{
                       </div>
                       <div className="hud-config-menu__section">
                         <div className="hud-config-menu__label d-flex justify-content-between align-items-center">
-                          <span>Escala HUD</span>
+                          <span>Zoom del HUD</span>
                           <span className="badge text-bg-secondary">{hudScale}%</span>
                         </div>
                         <input
                           type="range"
-                          min={80}
-                          max={125}
+                          min={70}
+                          max={140}
                           step={5}
                           value={hudScale}
                           onChange={e => updateScale(t.id, Number(e.target.value))}
                           className="form-range hud-config-menu__slider"
-                          aria-label="Escala del HUD"
+                          aria-label="Zoom del HUD"
                         />
                         <div className="d-flex justify-content-between text-muted small">
-                          <span>Compacto</span>
-                          <span>Amplio</span>
+                          <span>Menos zoom</span>
+                          <span>Más zoom</span>
                         </div>
                         <div className="d-flex flex-wrap gap-2 mt-2">
-                          {[80, 90, 100, 110, 120].map(val => (
+                          {ZOOM_PRESETS.map(val => (
                             <button
                               key={val}
                               type="button"
@@ -985,7 +1030,7 @@ export const DisplayPreview: React.FC<{
                     >
                       <span>Vista {previewScalePct}%</span>
                       <span style={{ opacity: .85 }}>{fitLabel}</span>
-                      <span style={{ opacity: .7 }}>HUD {hudScale}% · {densityName}</span>
+                      <span style={{ opacity: .7 }}>Zoom {hudScale}% · {densityName}</span>
                     </div>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
+import "dayjs/locale/es";
 import { emitAll, openDisplayWindow, emitAnnouncement } from "./displayChannel";
 import { PanelToastHost, panelNotify } from './notificationsPanel';
 import { useAuth } from './auth';
@@ -59,6 +60,8 @@ const format = (ms: number) => {
 };
 const uid = () => Math.random().toString(36).slice(2);
 const fmtClock = (tf: TimeFmt) => tf === '12' ? 'hh:mm A' : 'HH:mm';
+
+dayjs.locale("es");
 
 /* Pequeño reloj global local (sin crear archivo nuevo) */
 const useClock = (step = 250) => {
@@ -390,7 +393,7 @@ type HeaderHUDProps = {
 };
 
 const HeaderHUD: React.FC<HeaderHUDProps> = ({
-  now, nowMs, user, onLock, onLogout, settings, setSettings, tournaments, runningCount, anyRunning,
+  now: nowLabel, nowMs, user, onLock, onLogout, settings, setSettings, tournaments, runningCount, anyRunning,
   onPauseAll, onResumeAll, onResetAll, onNew, onCopySchedule, onExport, onOpenSettings,
   fileInputRef, importJSON, AnnouncementBtn, pushToast
 }) => {
@@ -439,7 +442,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
                   </div>
                 </div>
                 <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
-                  <span className="badge text-bg-dark" style={{fontVariantNumeric:'tabular-nums'}}>{now}</span>
+                  <span className="badge text-bg-dark" style={{fontVariantNumeric:'tabular-nums'}}>{nowLabel}</span>
                   <button className="btn btn-sm btn-outline-info" onClick={togglePanelMode} title="Cambiar a modo avanzado">Modo avanzado</button>
                 </div>
               </div>
@@ -534,7 +537,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
               <div className="vr" />
               <div className="d-flex flex-column align-items-end">
                 <span className="text-secondary small">Ahora</span>
-                <span className="fw-semibold" style={{fontVariantNumeric:'tabular-nums'}}>{now}</span>
+                <span className="fw-semibold" style={{fontVariantNumeric:'tabular-nums'}}>{nowLabel}</span>
               </div>
             </div>
 
@@ -664,15 +667,12 @@ export const MasterPanel: React.FC = () => {
   // Emitir a DISPLAY (eventos estructurales)
   useEffect(() => { emitAll(tournaments, settings.timeFmt); }, [tournaments, settings.timeFmt]);
 
-  // Reloj visible (texto)
-  const [now, setNow] = useState<string>(()=>dayjs().format(settings.timeFmt==='12'?"ddd DD MMM • hh:mm:ss A":"ddd DD MMM • HH:mm:ss"));
-  useEffect(()=>{
-    const id=setInterval(()=>setNow(dayjs().format(settings.timeFmt==='12'?"ddd DD MMM • hh:mm:ss A":"ddd DD MMM • HH:mm:ss")),1000);
-    return ()=>clearInterval(id);
-  },[settings.timeFmt]);
-
-  // Reloj numérico para timers
+  // Reloj principal (numérico + etiqueta formateada)
   const nowMs = useClock(1000);
+  const nowLabel = useMemo(
+    () => dayjs(nowMs).format(settings.timeFmt === '12' ? "ddd DD MMM • hh:mm:ss A" : "ddd DD MMM • HH:mm:ss"),
+    [nowMs, settings.timeFmt]
+  );
 
   // Toasts
   const pushToast = useCallback((t: { kind: any; text: string }) => {
@@ -968,7 +968,7 @@ export const MasterPanel: React.FC = () => {
 
       {/* ======= HUD Pro (HEADER) ======= */}
       <HeaderHUD
-        now={now}
+        now={nowLabel}
         nowMs={nowMs}
         user={user}
         onLock={lock}

@@ -1037,13 +1037,16 @@ const Display: React.FC = () => {
       ? "hud-frame--expanded"
       : "";
 
-  const frameScaleStyle = useMemo(
-    () =>
-      ({
-        fontSize: `${clampScale(hudScale)}%`,
-      }) as React.CSSProperties,
-    [hudScale]
-  );
+  const frameScaleStyle = useMemo(() => {
+    const zoom = clampScale(hudScale) / 100;
+    const zoomExtra = Math.max(0, zoom - 1);
+    return {
+      ["--hud-zoom" as any]: zoom.toString(),
+      ["--hud-zoom-extra" as any]: zoomExtra.toString(),
+      transform: `scale(${zoom})`,
+      transformOrigin: "top center",
+    } as React.CSSProperties;
+  }, [hudScale]);
 
   const headingClass = pick(
     !!isLight,
@@ -1087,6 +1090,16 @@ const Display: React.FC = () => {
       : density === "expanded"
       ? "flex flex-col gap-6"
       : "flex flex-col gap-4";
+  const hasTrack = !!trackData;
+  const hasSchedule = schedule.length > 0;
+  const infoDeckClass = [
+    "hud-info-grid",
+    density === "compact" ? "hud-info-grid--compact" : "",
+    density === "expanded" ? "hud-info-grid--expanded" : "",
+    hasTrack && hasSchedule ? "" : "hud-info-grid--single",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={shellClass} data-density={density}>
@@ -1281,76 +1294,82 @@ const Display: React.FC = () => {
                 </div>
               </div>
 
-              <div className={stackGapClass}>
-                {active && (
-                  <ProgressPanel
-                    isLight={!!isLight}
-                    accent={accent}
-                    displayPct={displayPct}
-                    transitionClass={transitionClass}
-                    stateLabel={stateLabel}
-                    nextEvent={nextEvent}
-                    remaining={remaining}
-                    mode={active.timer.mode ?? null}
-                    currentRound={trackData?.current ?? null}
-                    roundMinutes={active.roundMinutes}
-                    breakMinutes={active.breakMinutes}
-                    breakEnabled={active.breakEnabled}
-                    density={density}
-                  />
-                )}
+              {active && (
+                <ProgressPanel
+                  isLight={!!isLight}
+                  accent={accent}
+                  displayPct={displayPct}
+                  transitionClass={transitionClass}
+                  stateLabel={stateLabel}
+                  nextEvent={nextEvent}
+                  remaining={remaining}
+                  mode={active.timer.mode ?? null}
+                  currentRound={trackData?.current ?? null}
+                  roundMinutes={active.roundMinutes}
+                  breakMinutes={active.breakMinutes}
+                  breakEnabled={active.breakEnabled}
+                  density={density}
+                />
+              )}
 
-                {trackData && (
-                  <RoundTrack
-                    total={trackData.total}
-                    completed={trackData.completed}
-                    current={trackData.current}
-                    isLight={!!isLight}
-                    accent={trackAccent}
-                    stateLabel={stateLabel}
-                    density={density}
-                  />
-                )}
-
-                {schedule.length > 0 && (
-                  <div
-                    className={[
-                      pick(
-                        !!isLight,
-                        "rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
-                        "rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
-                      ),
-                      "schedule-card",
-                      density === "compact" ? "schedule-card--compact" : "",
-                      density === "expanded" ? "schedule-card--expanded" : "",
-                      schedule.length <= 2 ? "schedule-card--tight" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    <div className="schedule-card__header">
-                      <span className="schedule-card__subtitle">Próximos hitos</span>
-                      <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
+              {(hasTrack || hasSchedule) && (
+                <div className={infoDeckClass}>
+                  {hasTrack && (
+                    <div className="hud-info-grid__cell hud-info-grid__cell--timeline">
+                      <RoundTrack
+                        total={trackData!.total}
+                        completed={trackData!.completed}
+                        current={trackData!.current}
+                        isLight={!!isLight}
+                        accent={trackAccent}
+                        stateLabel={stateLabel}
+                        density={density}
+                      />
                     </div>
-                    <div className="schedule-card__list">
-                      {schedule.map((it, i) => (
-                        <div
-                          key={i}
-                          className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
-                        >
-                          <span className="schedule-chip__icon">
-                            <IconClock className="size-4" />
-                          </span>
-                          <div className="schedule-chip__content">
-                            <span className="schedule-chip__label">{it.label}</span>
-                            <span className="schedule-chip__time">{it.time}</span>
-                          </div>
+                  )}
+
+                  {hasSchedule && (
+                    <div className="hud-info-grid__cell hud-info-grid__cell--schedule">
+                      <div
+                        className={[
+                          pick(
+                            !!isLight,
+                            "rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
+                            "rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
+                          ),
+                          "schedule-card",
+                          density === "compact" ? "schedule-card--compact" : "",
+                          density === "expanded" ? "schedule-card--expanded" : "",
+                          schedule.length <= 2 ? "schedule-card--tight" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <div className="schedule-card__header">
+                          <span className="schedule-card__subtitle">Próximos hitos</span>
+                          <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
                         </div>
-                      ))}
+                        <div className="schedule-card__list">
+                          {schedule.map((it, i) => (
+                            <div
+                              key={i}
+                              className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
+                            >
+                              <span className="schedule-chip__icon">
+                                <IconClock className="size-4" />
+                              </span>
+                              <div className="schedule-chip__content">
+                                <span className="schedule-chip__label">{it.label}</span>
+                                <span className="schedule-chip__time">{it.time}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
         )}
