@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import ReactDOM from "react-dom/client";
 import dayjs from "dayjs";
+import "dayjs/locale/es";
 import {
   subscribeDisplay,
   subscribeAnnouncements,
@@ -11,12 +12,31 @@ import {
 import { BrandLogo } from "./BrandLogo";
 
 type HudDensity = "compact" | "standard" | "expanded";
+type HudScale = number;
 
 const HUD_DENSITY_KEY = "sigad-hud-density";
+const HUD_SCALE_KEY = "sigad-hud-scale";
 
 const parseDensity = (value: string | null | undefined): HudDensity | null => {
   return value === "compact" || value === "standard" || value === "expanded" ? value : null;
 };
+
+const parseScale = (value: string | null | undefined): HudScale | null => {
+  if (!value) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const rounded = Math.round(num);
+  if (rounded < 70 || rounded > 140) return null;
+  return rounded;
+};
+
+const clampScale = (value: HudScale): HudScale => {
+  const rounded = Math.round(value);
+  if (Number.isNaN(rounded)) return 100;
+  return Math.min(140, Math.max(70, rounded));
+};
+
+dayjs.locale("es");
 
 /* ==================== Iconos ==================== */
 const IconClock = (p: React.SVGProps<SVGSVGElement>) => (
@@ -840,6 +860,18 @@ const Display: React.FC = () => {
     return "standard";
   });
 
+  const [hudScale, setHudScale] = useState<HudScale>(() => {
+    const param = parseScale(getParam("scale"));
+    if (param) return param;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = parseScale(window.localStorage.getItem(HUD_SCALE_KEY));
+        if (stored) return stored;
+      } catch {}
+    }
+    return 100;
+  });
+
   const fixedId = useRef<string | null>(getParam("id"));
   const disableFX = getParam("nofx") === "1";
 
@@ -856,6 +888,12 @@ const Display: React.FC = () => {
   }, [density]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(HUD_SCALE_KEY, String(hudScale));
+    } catch {}
+  }, [hudScale]);
+
+  useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
       if (ev.origin && ev.origin !== window.location.origin) return;
       const data = ev.data as { type?: string; value?: unknown } | null;
@@ -863,6 +901,10 @@ const Display: React.FC = () => {
         const raw = typeof data.value === "string" ? data.value : null;
         const next = parseDensity(raw);
         if (next) setDensity(next);
+      } else if (data?.type === "HUD_SCALE") {
+        const raw = typeof data.value === "number" ? data.value : Number(data.value);
+        const next = parseScale(Number.isFinite(raw) ? String(raw) : null);
+        if (next) setHudScale(clampScale(next));
       }
     };
     window.addEventListener("message", onMessage);
@@ -979,6 +1021,14 @@ const Display: React.FC = () => {
       ? "hud-frame--expanded"
       : "";
 
+  const frameScaleStyle = useMemo(
+    () =>
+      ({
+        fontSize: `${clampScale(hudScale)}%`,
+      }) as React.CSSProperties,
+    [hudScale]
+  );
+
   const headingClass = pick(
     !!isLight,
     `${
@@ -998,18 +1048,29 @@ const Display: React.FC = () => {
   );
 
   const timeGridClass = `grid grid-cols-3 ${
-    density === "compact" ? "gap-3 mb-5" : density === "expanded" ? "gap-6 mb-8" : "gap-4 mb-7"
+    density === "compact" ? "gap-3" : density === "expanded" ? "gap-6" : "gap-4"
   }`;
-  const statsGridClass = `grid grid-cols-1 md:grid-cols-3 ${
-    density === "compact" ? "gap-3 mb-5 text-[13px]" : density === "expanded" ? "gap-5 mb-7 text-[15px]" : "gap-4 mb-6 text-sm"
-  }`;
-  const focusGridBase =
+  const statsGridClass = [
+    "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
     density === "compact"
-      ? "grid grid-cols-1 gap-3 mb-5"
+      ? "gap-3 text-[13px]"
       : density === "expanded"
-      ? "grid grid-cols-1 gap-5 mb-7"
-      : "grid grid-cols-1 gap-4 mb-6";
-  const scheduleMargin = density === "compact" ? "mt-4" : density === "expanded" ? "mt-6" : "mt-5";
+      ? "gap-5 text-[15px]"
+      : "gap-4 text-sm",
+  ].join(" ");
+  const columnsClass = [
+    "hud-columns",
+    density === "compact" ? "hud-columns--compact" : "",
+    density === "expanded" ? "hud-columns--expanded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const stackGapClass =
+    density === "compact"
+      ? "flex flex-col gap-3"
+      : density === "expanded"
+      ? "flex flex-col gap-6"
+      : "flex flex-col gap-4";
 
   return (
     <div className={shellClass} data-density={density}>
@@ -1081,6 +1142,8 @@ const Display: React.FC = () => {
             ]
               .filter(Boolean)
               .join(" ")}
+            style={frameScaleStyle}
+            data-scale={clampScale(hudScale)}
           >
             {/* Encabezado */}
             <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -1113,160 +1176,166 @@ const Display: React.FC = () => {
             </h1>
 
             {/* HH : MM : SS */}
-            <div className={timeGridClass} aria-live="polite">
-              <TimeBlock
-                value={h}
-                label="HORAS"
-                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
-                isLight={!!isLight}
-                density={density}
-              />
-              <TimeBlock
-                value={m}
-                label="MINUTOS"
-                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
-                isLight={!!isLight}
-                density={density}
-              />
-              <TimeBlock
-                value={s}
-                label="SEGUNDOS"
-                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
-                isLight={!!isLight}
-                density={density}
-              />
-            </div>
+            <div className={columnsClass}>
+              <div className={stackGapClass} aria-live="polite">
+                <div className={timeGridClass}>
+                  <TimeBlock
+                    value={h}
+                    label="HORAS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                  <TimeBlock
+                    value={m}
+                    label="MINUTOS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                  <TimeBlock
+                    value={s}
+                    label="SEGUNDOS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                </div>
 
-            {/* Stats */}
-            <div className={statsGridClass}>
-              <StatCard label="Estado" isLight={!!isLight} density={density}>
-                <span
-                  className={(() => {
-                    const base = "inline-flex items-center gap-2";
-                    if (stateLabel === "En curso") return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
-                    if (stateLabel === "Pausado") return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
-                    if (stateLabel === "Terminado") return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
-                    return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
-                  })()}
-                >
-                  <span className="relative inline-flex">
+                <div className={statsGridClass}>
+                  <StatCard label="Estado" isLight={!!isLight} density={density}>
                     <span
                       className={(() => {
-                        if (stateLabel === "En curso") return "status-dot bg-emerald-500";
-                        if (stateLabel === "Pausado") return "status-dot bg-amber-500";
-                        if (stateLabel === "Terminado") return "status-dot bg-rose-500";
-                        return "status-dot bg-zinc-400";
+                        const base = "inline-flex items-center gap-2";
+                        if (stateLabel === "En curso")
+                          return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
+                        if (stateLabel === "Pausado")
+                          return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
+                        if (stateLabel === "Terminado")
+                          return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
+                        return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
                       })()}
-                    />
-                    {(stateLabel === "En curso" || stateLabel === "Pausado") && (
-                      <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
-                    )}
-                  </span>
-                  {stateLabel}
-                </span>
-              </StatCard>
-
-              <StatCard label="ETA fin torneo" isLight={!!isLight} density={density}>
-                {(() => {
-                  const perRound = active.roundMinutes * 60_000;
-                  const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
-                  const inRound =
-                    active.timer.target !== null &&
-                    (active.timer.running || active.timer.remainingMs > 0) &&
-                    active.timer.mode === "round";
-                  const left =
-                    active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
-                  const eta =
-                    remaining +
-                    Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
-                  return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
-                })()}
-              </StatCard>
-
-              <StatCard label="Break" isLight={!!isLight} density={density}>
-                <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-700", "inline-flex items-center gap-2 text-zinc-200")}>
-                  <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                  {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
-                </span>
-              </StatCard>
-            </div>
-
-            {/* Focus cards */}
-            <div
-              className={[
-                focusGridBase,
-                trackData ? "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" : "",
-              ].join(
-                " "
-              )}
-            >
-              {active && (
-                <ProgressPanel
-                  isLight={!!isLight}
-                  accent={accent}
-                  displayPct={displayPct}
-                  transitionClass={transitionClass}
-                  stateLabel={stateLabel}
-                  nextEvent={nextEvent}
-                  remaining={remaining}
-                  mode={active.timer.mode ?? null}
-                  currentRound={trackData?.current ?? null}
-                  roundMinutes={active.roundMinutes}
-                  breakMinutes={active.breakMinutes}
-                  breakEnabled={active.breakEnabled}
-                  density={density}
-                />
-              )}
-              {trackData && (
-                <RoundTrack
-                  total={trackData.total}
-                  completed={trackData.completed}
-                  current={trackData.current}
-                  isLight={!!isLight}
-                  accent={trackAccent}
-                  stateLabel={stateLabel}
-                  density={density}
-                />
-              )}
-            </div>
-
-            {/* Hitos */}
-            {schedule.length > 0 && (
-              <div
-                className={[
-                  pick(
-                    !!isLight,
-                    `${scheduleMargin} rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm`,
-                    `${scheduleMargin} rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5`
-                  ),
-                  "schedule-card",
-                  density === "compact" ? "schedule-card--compact" : "",
-                  density === "expanded" ? "schedule-card--expanded" : "",
-                  schedule.length <= 2 ? "schedule-card--tight" : "",
-                ].join(" ")}
-              >
-                <div className="schedule-card__header">
-                  <span className="schedule-card__subtitle">Próximos hitos</span>
-                  <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
-                </div>
-                <div className="schedule-card__list">
-                  {schedule.map((it, i) => (
-                    <div
-                      key={i}
-                      className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
                     >
-                      <span className="schedule-chip__icon">
-                        <IconClock className="size-4" />
+                      <span className="relative inline-flex">
+                        <span
+                          className={(() => {
+                            if (stateLabel === "En curso") return "status-dot bg-emerald-500";
+                            if (stateLabel === "Pausado") return "status-dot bg-amber-500";
+                            if (stateLabel === "Terminado") return "status-dot bg-rose-500";
+                            return "status-dot bg-zinc-400";
+                          })()}
+                        />
+                        {(stateLabel === "En curso" || stateLabel === "Pausado") && (
+                          <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
+                        )}
                       </span>
-                      <div className="schedule-chip__content">
-                        <span className="schedule-chip__label">{it.label}</span>
-                        <span className="schedule-chip__time">{it.time}</span>
-                      </div>
-                    </div>
-                  ))}
+                      {stateLabel}
+                    </span>
+                  </StatCard>
+
+                  <StatCard label="ETA fin torneo" isLight={!!isLight} density={density}>
+                    {(() => {
+                      const perRound = active.roundMinutes * 60_000;
+                      const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
+                      const inRound =
+                        active.timer.target !== null &&
+                        (active.timer.running || active.timer.remainingMs > 0) &&
+                        active.timer.mode === "round";
+                      const left =
+                        active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
+                      const eta =
+                        remaining +
+                        Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
+                      return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
+                    })()}
+                  </StatCard>
+
+                  <StatCard label="Break" isLight={!!isLight} density={density}>
+                    <span
+                      className={pick(
+                        !!isLight,
+                        "inline-flex items-center gap-2 text-zinc-700",
+                        "inline-flex items-center gap-2 text-zinc-200"
+                      )}
+                    >
+                      <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                      {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
+                    </span>
+                  </StatCard>
                 </div>
               </div>
-            )}
+
+              <div className={stackGapClass}>
+                {active && (
+                  <ProgressPanel
+                    isLight={!!isLight}
+                    accent={accent}
+                    displayPct={displayPct}
+                    transitionClass={transitionClass}
+                    stateLabel={stateLabel}
+                    nextEvent={nextEvent}
+                    remaining={remaining}
+                    mode={active.timer.mode ?? null}
+                    currentRound={trackData?.current ?? null}
+                    roundMinutes={active.roundMinutes}
+                    breakMinutes={active.breakMinutes}
+                    breakEnabled={active.breakEnabled}
+                    density={density}
+                  />
+                )}
+
+                {trackData && (
+                  <RoundTrack
+                    total={trackData.total}
+                    completed={trackData.completed}
+                    current={trackData.current}
+                    isLight={!!isLight}
+                    accent={trackAccent}
+                    stateLabel={stateLabel}
+                    density={density}
+                  />
+                )}
+
+                {schedule.length > 0 && (
+                  <div
+                    className={[
+                      pick(
+                        !!isLight,
+                        "rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
+                        "rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
+                      ),
+                      "schedule-card",
+                      density === "compact" ? "schedule-card--compact" : "",
+                      density === "expanded" ? "schedule-card--expanded" : "",
+                      schedule.length <= 2 ? "schedule-card--tight" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <div className="schedule-card__header">
+                      <span className="schedule-card__subtitle">Próximos hitos</span>
+                      <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
+                    </div>
+                    <div className="schedule-card__list">
+                      {schedule.map((it, i) => (
+                        <div
+                          key={i}
+                          className={["schedule-chip", i === 0 ? "schedule-chip--active" : ""].join(" ")}
+                        >
+                          <span className="schedule-chip__icon">
+                            <IconClock className="size-4" />
+                          </span>
+                          <div className="schedule-chip__content">
+                            <span className="schedule-chip__label">{it.label}</span>
+                            <span className="schedule-chip__time">{it.time}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         )}
 
