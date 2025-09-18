@@ -994,7 +994,7 @@ export const MasterPanel: React.FC = () => {
       {/* Grid + sidebar preview layout */}
       <main className="container pb-3" style={{maxHeight: 'calc(100vh - 170px)', overflowY: 'auto'}}>
         <div className="row g-3">
-          <div className="col-12 col-xl-9">
+          <div className="col-12 col-xl-8 col-xxl-9">
             <div className={gridClasses}>
               {tournaments.map(t => (
                 <div className="col" key={t.id}>
@@ -1028,7 +1028,7 @@ export const MasterPanel: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="col-12 col-xl-3 d-flex flex-column gap-3">
+          <div className="col-12 col-xl-4 col-xxl-3 d-flex flex-column gap-3">
             <DisplayPreview
               tournaments={tournamentsForPreview}
               timeFmt={settings.timeFmt}

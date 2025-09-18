@@ -251,7 +251,7 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
     items.push({
       label:
         t.timer.mode === "break"
-          ? "Fin break"
+          ? "Fin descanso"
           : `Fin ronda ${inRound ? currentIndex : currentIndex + 1}`,
       time: dayjs(base + remaining).format(fmtClock(tf)),
     });
@@ -262,7 +262,7 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
   for (let i = 1; i <= left; i++) {
     if (t.breakEnabled && t.breakMinutes > 0) {
       base += t.breakMinutes * 60_000;
-      items.push({ label: "Break", time: dayjs(base).format(fmtClock(tf)) });
+      items.push({ label: "Descanso", time: dayjs(base).format(fmtClock(tf)) });
     }
     base += t.roundMinutes * 60_000;
     items.push({
@@ -299,8 +299,8 @@ interface StatCardProps {
 const StatCard = ({ label, children, isLight, density }: StatCardProps) => {
   const baseClass = pick(
     isLight,
-    "rounded-xl border border-zinc-200 bg-white/80 shadow-sm transition-colors hover:bg-white",
-    "rounded-xl border border-zinc-800 bg-zinc-900/50 transition-colors hover:bg-zinc-900/70"
+    "rounded-xl border border-zinc-200 bg-white/80 shadow-sm",
+    "rounded-xl border border-zinc-800 bg-zinc-900/50"
   );
   const paddingClass = density === "compact" ? "p-3" : density === "expanded" ? "p-5" : "p-4";
   const labelClass = pick(
@@ -442,32 +442,17 @@ const RoundTrack: React.FC<RoundTrackProps> = ({
   const safeTotal = Math.max(1, total);
   const safeCurrent = Math.min(safeTotal, Math.max(1, current));
   const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
-  const maxDots = density === "expanded" ? 14 : density === "compact" ? 8 : 12;
-  let start = Math.max(1, safeCurrent - Math.floor(maxDots / 2));
-  let end = Math.min(safeTotal, start + maxDots - 1);
-  start = Math.max(1, end - maxDots + 1);
-  end = Math.min(safeTotal, start + maxDots - 1);
-  const isCrowdedRange = safeTotal > maxDots;
-  const showLead = !isCrowdedRange && start > 1;
-  const showTail = !isCrowdedRange && end < safeTotal;
-  const nodes = [] as number[];
+  const remaining = Math.max(0, safeTotal - safeCompleted);
+  const windowSize = density === "expanded" ? 12 : density === "compact" ? 7 : 9;
+  let start = Math.max(1, safeCurrent - Math.floor(windowSize / 2));
+  let end = Math.min(safeTotal, start + windowSize - 1);
+  start = Math.max(1, end - windowSize + 1);
+  end = Math.min(safeTotal, start + windowSize - 1);
+  const nodes: number[] = [];
   for (let idx = start; idx <= end; idx++) nodes.push(idx);
-
-  const accentIcon = accent === "break" ? (
-    <IconCoffee className="size-5" />
-  ) : (
-    <IconFlag className="size-5" />
-  );
-  const description = (() => {
-    if (stateLabel === "Terminado") return "El torneo llegó a la meta. Puedes preparar la siguiente fase.";
-    if (stateLabel === "Pausado") return "La ronda está en pausa temporal. Retoma cuando la sala esté lista.";
-    if (accent === "break") return "Disfruta del descanso mientras preparamos la próxima ronda.";
-    return "Seguimiento visual del avance global de todas las rondas.";
-  })();
-
-  const subtitleText = density === "compact" ? (accent === "break" ? "Break" : "Rondas") : accent === "break" ? "Tiempo de descanso" : "Mapa de rondas";
-  const titleText = density === "compact" ? (accent === "break" ? "Descanso en curso" : "Avance del torneo") : accent === "break" ? "Break panorámico" : "Avance general";
-  const metaText = density === "compact" ? `${safeCompleted}/${safeTotal}` : `${safeCompleted}/${safeTotal} completadas`;
+  const showLead = start > 1;
+  const showTail = end < safeTotal;
+  const progress = safeTotal === 0 ? 0 : safeCompleted / safeTotal;
 
   const classes = [
     "round-track",
@@ -475,62 +460,83 @@ const RoundTrack: React.FC<RoundTrackProps> = ({
     accent === "break" ? "round-track--break" : "",
     density === "compact" ? "round-track--density-compact" : "",
     density === "expanded" ? "round-track--density-expanded" : "",
-    safeTotal <= 8 ? "round-track--mini" : "",
-    isCrowdedRange ? "round-track--crowded" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
-  const showCaption = density !== "compact" || isCrowdedRange;
+  const subtitle = accent === "break" ? "Descanso" : "Rondas";
+  const title = accent === "break" ? "Descanso en curso" : `Ronda ${safeCurrent} de ${safeTotal}`;
+  const badgeText = `${safeCompleted}/${safeTotal}`;
+  const badgeHint = stateLabel;
+  const accentIcon = accent === "break" ? <IconCoffee className="size-5" /> : <IconFlag className="size-5" />;
+
+  const stats = [
+    { label: "Estado", value: stateLabel },
+    { label: "Completadas", value: safeCompleted.toString() },
+    { label: "Restantes", value: remaining.toString() },
+  ];
 
   return (
-    <div
-      className={classes}
-    >
+    <div className={classes}>
       <div className="round-track__header">
         <span className="round-track__icon">{accentIcon}</span>
-        <div>
-          <span className="round-track__subtitle">{subtitleText}</span>
-          <div className="round-track__title">{titleText}</div>
+        <div className="round-track__titles">
+          <span className="round-track__subtitle">{subtitle}</span>
+          <span className="round-track__title">{title}</span>
         </div>
-        <span className="round-track__meta">{metaText}</span>
+        <span className="round-track__badge">
+          <strong>{badgeText}</strong>
+          <span>{badgeHint}</span>
+        </span>
       </div>
-      <div className="round-track__rail" role="list" aria-label="Avance de rondas">
-        {showLead && (
-          <span className="round-track__ellipsis" aria-hidden>
-            …
-          </span>
-        )}
-        {nodes.map((idx) => {
-          const status = idx <= safeCompleted ? "done" : idx === safeCurrent && safeCompleted !== safeTotal ? "now" : "todo";
-          const label =
-            status === "done" ? "Finalizada" : status === "now" ? "En curso" : accent === "break" ? "Pendiente" : "Pendiente";
-          return (
-            <span
-              key={idx}
-              className={["round-track__node", `round-track__node--${status}`].join(" ")}
-              role="listitem"
-              aria-label={`Ronda ${idx}: ${label}`}
-            >
-              <span className="round-track__label">{idx}</span>
-              <span
-                className={[
-                  "round-track__spark",
-                  status === "now" ? "round-track__spark--active" : "",
-                  status === "done" ? "round-track__spark--trail" : "",
-                ].join(" ")}
-                aria-hidden
-              />
+      <div className="round-track__rail" style={{ ["--progress" as any]: progress.toString() }}>
+        <div className="round-track__nodes" role="list" aria-label="Avance de rondas">
+          {showLead && (
+            <span className="round-track__ellipsis" aria-hidden>
+              …
             </span>
-          );
-        })}
-        {showTail && (
-          <span className="round-track__ellipsis" aria-hidden>
-            …
-          </span>
-        )}
+          )}
+          {nodes.map((idx) => {
+            const status =
+              idx <= safeCompleted
+                ? "done"
+                : idx === safeCurrent && safeCompleted !== safeTotal
+                ? "current"
+                : "upcoming";
+            const label =
+              status === "done"
+                ? "Finalizada"
+                : status === "current"
+                ? "En curso"
+                : accent === "break"
+                ? "Pendiente"
+                : "Pendiente";
+            return (
+              <span
+                key={idx}
+                className={["round-track__node", `round-track__node--${status}`].join(" ")}
+                role="listitem"
+                aria-label={`Ronda ${idx}: ${label}`}
+              >
+                {idx}
+              </span>
+            );
+          })}
+          {showTail && (
+            <span className="round-track__ellipsis" aria-hidden>
+              …
+            </span>
+          )}
+        </div>
       </div>
-      {showCaption && <p className="round-track__caption">{description}</p>}
+      <div className="round-track__stats">
+        {stats.map((stat, idx) => (
+          <div key={idx} className="round-track__stat">
+            <span className="round-track__stat-label">{stat.label}</span>
+            <span className="round-track__stat-value">{stat.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -584,8 +590,8 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
   const title = (() => {
     if (!mode) return "Temporizador listo";
     if (isBreak) {
-      if (!breakEnabled) return "Break libre";
-      return breakMinutes > 0 ? `Break de ${breakMinutes} min` : "Break en progreso";
+      if (!breakEnabled) return "Descanso libre";
+      return breakMinutes > 0 ? `Descanso de ${breakMinutes} min` : "Descanso en progreso";
     }
     if (mode === "round") {
       if (stateLabel === "Terminado") return "Ronda finalizada";
@@ -601,7 +607,7 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
     : roundMinutes > 0
     ? `${roundMinutes} min`
     : "Flexible";
-  const paceSecondary = isBreak ? "duración del break" : "duración de la ronda";
+  const paceSecondary = isBreak ? "duración del descanso" : "duración de la ronda";
   const nextPrimary = nextEvent ? nextEvent.label : stateLabel;
   const nextSecondary = nextEvent ? nextEvent.time : "seguimiento en vivo";
 
@@ -1067,15 +1073,15 @@ const Display: React.FC = () => {
   );
 
   const timeGridClass = `grid grid-cols-3 ${
-    density === "compact" ? "gap-3" : density === "expanded" ? "gap-6" : "gap-4"
+    density === "compact" ? "gap-2" : density === "expanded" ? "gap-5" : "gap-3"
   }`;
   const statsGridClass = [
-    "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
+    "grid grid-cols-1 md:grid-cols-2",
     density === "compact"
-      ? "gap-3 text-[13px]"
+      ? "gap-2.5 text-[13px]"
       : density === "expanded"
-      ? "gap-5 text-[15px]"
-      : "gap-4 text-sm",
+      ? "gap-4 text-[15px]"
+      : "gap-3 text-[14px]",
   ].join(" ");
   const columnsClass = [
     "hud-columns",
@@ -1086,10 +1092,10 @@ const Display: React.FC = () => {
     .join(" ");
   const stackGapClass =
     density === "compact"
-      ? "flex flex-col gap-3"
+      ? "flex flex-col gap-2"
       : density === "expanded"
-      ? "flex flex-col gap-6"
-      : "flex flex-col gap-4";
+      ? "flex flex-col gap-5"
+      : "flex flex-col gap-3";
   const hasTrack = !!trackData;
   const hasSchedule = schedule.length > 0;
   const infoDeckClass = [
@@ -1182,7 +1188,7 @@ const Display: React.FC = () => {
 
               <span className={pick(!!isLight, "text-zinc-600 text-sm inline-flex items-center gap-2", "text-zinc-300 text-sm inline-flex items-center gap-2")}>
                 <IconLayers className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                {active.timer.mode === "break" ? <>Break</> : <>Ronda • {active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted} / {active.roundsTotal}</>}
+                {active.timer.mode === "break" ? <>Descanso</> : <>Ronda • {active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted} / {active.roundsTotal}</>}
               </span>
 
               <span className={pick(!!isLight, "ml-auto text-zinc-600 text-sm inline-flex items-center gap-2", "ml-auto text-zinc-300 text-sm inline-flex items-center gap-2")}>
@@ -1279,18 +1285,6 @@ const Display: React.FC = () => {
                     })()}
                   </StatCard>
 
-                  <StatCard label="Break" isLight={!!isLight} density={density}>
-                    <span
-                      className={pick(
-                        !!isLight,
-                        "inline-flex items-center gap-2 text-zinc-700",
-                        "inline-flex items-center gap-2 text-zinc-200"
-                      )}
-                    >
-                      <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                      {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
-                    </span>
-                  </StatCard>
                 </div>
               </div>
 
@@ -1400,7 +1394,7 @@ const Display: React.FC = () => {
                       <span className={pick(!!lightCard, "text-zinc-600", "text-zinc-300")}>
                         {t.timer.mode === "break" ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <IconCoffee className={pick(!!lightCard, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} /> Break
+                            <IconCoffee className={pick(!!lightCard, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} /> Descanso
                           </span>
                         ) : (
                           <>Ronda • {roundIdx} / {t.roundsTotal}</>
