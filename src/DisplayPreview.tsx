@@ -4,6 +4,8 @@ import type { Tournament } from './App';
 
 type HudDensity = 'compact' | 'standard' | 'expanded';
 const HUD_DENSITIES: HudDensity[] = ['compact', 'standard', 'expanded'];
+const HUD_DENSITY_KEY_GLOBAL = 'sigad-hud-density';
+const HUD_SCALE_KEY_GLOBAL = 'sigad-hud-scale';
 
 /**
  * DisplayPreview • v4.2
@@ -91,6 +93,7 @@ export const DisplayPreview: React.FC<{
     frame?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
     const expanded = document.getElementById(`prev-exp-${id}`) as HTMLIFrameElement | null;
     expanded?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
+    try { localStorage.setItem(HUD_DENSITY_KEY_GLOBAL, mode); } catch {}
   };
   const pushScale = (id: string, value: number) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '*';
@@ -99,6 +102,7 @@ export const DisplayPreview: React.FC<{
     frame?.contentWindow?.postMessage({ type: 'HUD_SCALE', value }, targetOrigin);
     const expanded = document.getElementById(`prev-exp-${id}`) as HTMLIFrameElement | null;
     expanded?.contentWindow?.postMessage({ type: 'HUD_SCALE', value }, targetOrigin);
+    try { localStorage.setItem(HUD_SCALE_KEY_GLOBAL, String(value)); } catch {}
   };
   const getDensity = (id: string): HudDensity => (densityMap[id] as HudDensity) ?? 'standard';
   const setDensity = (id: string, mode: HudDensity) => setDensityMap(prev => ({ ...prev, [id]: mode }));
@@ -135,7 +139,7 @@ export const DisplayPreview: React.FC<{
   /* ---------- TICK local para HUD (countdown vivo) ---------- */
   const [, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(v => (v+1)%1_000_000), 500); // 2 Hz
+    const id = setInterval(() => setTick(v => (v+1)%1_000_000), 1000);
     return () => clearInterval(id);
   }, []);
 

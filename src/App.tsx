@@ -46,6 +46,7 @@ export interface Tournament {
 
 export type SortBy = "created" | "eta" | "name" | "game";
 export type TimeFmt = '24' | '12';
+export type PanelMode = 'advanced' | 'simple';
 
 /* ====================== Helpers ====================== */
 const pad2 = (n: number) => n.toString().padStart(2, "0");
@@ -204,6 +205,7 @@ const TournamentOffcanvas: React.FC<{ open:boolean; onClose:()=>void; onSubmit:(
   const set = (patch: Partial<ModalData>) => setForm(f=>({...f, ...patch}));
 
   if(!open) return null;
+
   return (
     <>
       <div className="offcanvas offcanvas-end show text-bg-dark" style={{visibility:'visible'}}>
@@ -277,8 +279,22 @@ const TournamentOffcanvas: React.FC<{ open:boolean; onClose:()=>void; onSubmit:(
 };
 
 /* ====================== Offcanvas Ajustes ====================== */
-interface Settings { timeFmt: TimeFmt; cols: 1|2|3; soundEnabled: boolean; warn1m: boolean; autoOpenDisplay: boolean; }
-const defaultSettings: Settings = { timeFmt: '24', cols: 1, soundEnabled: true, warn1m: true, autoOpenDisplay: false };
+interface Settings { timeFmt: TimeFmt; cols: 1|2|3; soundEnabled: boolean; warn1m: boolean; autoOpenDisplay: boolean; panelMode: PanelMode; }
+const defaultSettings: Settings = { timeFmt: '24', cols: 1, soundEnabled: true, warn1m: true, autoOpenDisplay: false, panelMode: 'advanced' };
+const parseSettings = (value: unknown): Settings => {
+  if (!value || typeof value !== 'object') return defaultSettings;
+  const raw = value as Partial<Settings> & Record<string, unknown>;
+  const cols = raw.cols === 2 ? 2 : raw.cols === 3 ? 3 : 1;
+  const timeFmt: TimeFmt = raw.timeFmt === '12' ? '12' : '24';
+  return {
+    timeFmt,
+    cols,
+    soundEnabled: raw.soundEnabled !== undefined ? !!raw.soundEnabled : defaultSettings.soundEnabled,
+    warn1m: raw.warn1m !== undefined ? !!raw.warn1m : defaultSettings.warn1m,
+    autoOpenDisplay: raw.autoOpenDisplay !== undefined ? !!raw.autoOpenDisplay : defaultSettings.autoOpenDisplay,
+    panelMode: raw.panelMode === 'simple' ? 'simple' : 'advanced',
+  };
+};
 
 const SettingsOffcanvas: React.FC<{ open:boolean; onClose:()=>void; value:Settings; onChange:(s:Settings)=>void }>=({open,onClose,value,onChange})=>{
   const [s, setS] = useState<Settings>(value);
@@ -307,6 +323,13 @@ const SettingsOffcanvas: React.FC<{ open:boolean; onClose:()=>void; value:Settin
                 <option value={1}>1</option>
                 <option value={2}>2</option>
                 <option value={3}>3</option>
+              </select>
+            </div>
+            <div className="col-12">
+              <label className="form-label">Modo del panel</label>
+              <select className="form-select" value={s.panelMode} onChange={e=>set({ panelMode: e.target.value as PanelMode })}>
+                <option value="advanced">Avanzado</option>
+                <option value="simple">Simple</option>
               </select>
             </div>
             <div className="col-12">
@@ -372,6 +395,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
   fileInputRef, importJSON, AnnouncementBtn, pushToast
 }) => {
   const total = tournaments.length;
+  const simpleMode = settings.panelMode === 'simple';
 
   const nextEventClock = useMemo(() => {
     const ts = tournaments
@@ -397,6 +421,75 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
     WebkitBackdropFilter: "blur(8px)",
     borderRadius: 14
   };
+
+  const togglePanelMode = () => setSettings(s => ({ ...s, panelMode: s.panelMode === 'simple' ? 'advanced' : 'simple' }));
+
+  if (simpleMode) {
+    return (
+      <header className="sticky-top pt-2 pb-3" style={{zIndex: 1030, background: 'transparent'}}>
+        <div className="container">
+          <div className="p-3" style={glass}>
+            <div className="d-flex flex-column gap-3">
+              <div className="d-flex align-items-center gap-3 flex-wrap">
+                <div className="d-flex align-items-center gap-3">
+                  <BrandLogo size={44} />
+                  <div className="d-flex flex-column lh-sm">
+                    <strong className="fs-5">SIGAD • TIMMER</strong>
+                    <small className="text-secondary">Modo simple</small>
+                  </div>
+                </div>
+                <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
+                  <span className="badge text-bg-dark" style={{fontVariantNumeric:'tabular-nums'}}>{now}</span>
+                  <button className="btn btn-sm btn-outline-info" onClick={togglePanelMode} title="Cambiar a modo avanzado">Modo avanzado</button>
+                </div>
+              </div>
+
+              <div className="d-flex flex-wrap gap-2">
+                <button className="btn btn-sm btn-primary" onClick={onNew}>➕ Nuevo</button>
+                <button className="btn btn-sm btn-outline-warning" onClick={onPauseAll}>⏸ Pausar</button>
+                <button className="btn btn-sm btn-outline-success" onClick={onResumeAll}>▶ Reanudar</button>
+                <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll}>↺ Reset</button>
+                <button className="btn btn-sm btn-outline-info" onClick={onOpenSettings}>⚙️ Ajustes</button>
+              </div>
+
+              <details className="simple-panel__details">
+                <summary>Más herramientas</summary>
+                <div className="pt-2 d-flex flex-wrap gap-2">
+                  <button className="btn btn-sm btn-outline-light" onClick={onCopySchedule}>📋 Itinerario</button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json"
+                    hidden
+                    onChange={e=>{
+                      const f=e.target.files?.[0];
+                      if(f) importJSON(f);
+                      if(fileInputRef.current) fileInputRef.current.value='';
+                    }}
+                  />
+                  <button className="btn btn-sm btn-outline-light" onClick={()=>fileInputRef.current?.click()}>📥 Importar</button>
+                  <button className="btn btn-sm btn-outline-light" onClick={onExport}>📤 Exportar</button>
+                  <AnnouncementBtn pushToast={pushToast as any}/>
+                  {user && (
+                    <div className="d-flex flex-wrap gap-2">
+                      <button className="btn btn-sm btn-outline-warning" onClick={onLock}>🔒 Bloquear</button>
+                      <button className="btn btn-sm btn-outline-danger" onClick={onLogout}>⎋ Cerrar sesión</button>
+                    </div>
+                  )}
+                </div>
+              </details>
+
+              <div className="d-flex flex-wrap gap-2 text-secondary small">
+                <span className="badge text-bg-dark">Activos <strong className="ms-1">{runningCount}</strong>/<strong>{total}</strong></span>
+                <span className="badge text-bg-dark">Próximo: <strong className="ms-1">{nextEventClock}</strong></span>
+                <span className="badge text-bg-dark">ETA: <strong className="ms-1">{globalETAClock}</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   const meterDot = (ok:boolean) => (
     <span className={`badge rounded-pill ${ok ? 'text-bg-success' : 'text-bg-secondary'}`} style={{fontVariantNumeric:'tabular-nums'}}>
@@ -521,6 +614,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
               <button className="btn btn-sm btn-outline-light" onClick={onExport}>📤 Exportar</button>
               <button className="btn btn-sm btn-outline-info" onClick={onOpenSettings} title="Ajustes (S)">⚙️ Ajustes</button>
               <AnnouncementBtn pushToast={pushToast as any}/>
+              <button className="btn btn-sm btn-outline-secondary" onClick={togglePanelMode} title="Cambiar a modo simple">Modo simple</button>
             </div>
 
             {/* Métricas (responsive) */}
@@ -554,7 +648,11 @@ export const MasterPanel: React.FC = () => {
 
   // UI + Ajustes
   const [settings, setSettings] = useState<Settings>(()=> {
-    try { return JSON.parse(localStorage.getItem(LS_UI) || ""); } catch {}
+    try {
+      const raw = localStorage.getItem(LS_UI);
+      if (!raw) return defaultSettings;
+      return parseSettings(JSON.parse(raw));
+    } catch {}
     return defaultSettings;
   });
   useEffect(()=>{ try { localStorage.setItem(LS_UI, JSON.stringify(settings)); } catch{} }, [settings]);
@@ -574,7 +672,7 @@ export const MasterPanel: React.FC = () => {
   },[settings.timeFmt]);
 
   // Reloj numérico para timers
-  const nowMs = useClock(250);
+  const nowMs = useClock(1000);
 
   // Toasts
   const pushToast = useCallback((t: { kind: any; text: string }) => {
@@ -783,7 +881,7 @@ export const MasterPanel: React.FC = () => {
           }
           setTournaments(sanitized);
         }
-        if (data.settings) setSettings({ ...defaultSettings, ...data.settings });
+        if (data.settings) setSettings(parseSettings(data.settings));
         pushToast({kind:'success', text:'📥 Importado correctamente'});
       } catch(err) { pushToast({kind:'warning', text:'Error al importar JSON'}); }
     };
@@ -810,8 +908,11 @@ export const MasterPanel: React.FC = () => {
     } catch { pushToast({kind:'warning', text:'Error al copiar'}); }
   };
 
-  const gridClasses = `row g-3 row-cols-1 ${settings.cols===2 ? 'row-cols-xl-2' : ''} ${settings.cols===3 ? 'row-cols-xxl-3' : ''}`.trim();
-  const compact = settings.cols === 3;
+  const showAdvanced = settings.panelMode === 'advanced';
+  const effectiveCols = showAdvanced ? settings.cols : 1;
+  const gridClasses = `row g-3 row-cols-1 ${effectiveCols===2 ? 'row-cols-xl-2' : ''} ${effectiveCols===3 ? 'row-cols-xxl-3' : ''}`.trim();
+  const compact = showAdvanced && effectiveCols === 3;
+  const CardComponent = showAdvanced ? TournamentCard : SimpleTournamentCard;
 
   // Atajos (sin passive:true)
   useEffect(()=>{
@@ -897,7 +998,7 @@ export const MasterPanel: React.FC = () => {
             <div className={gridClasses}>
               {tournaments.map(t => (
                 <div className="col" key={t.id}>
-                  <TournamentCard
+                  <CardComponent
                     t={t}
                     nowMs={nowMs}
                     timeFmt={settings.timeFmt}
@@ -947,9 +1048,9 @@ export const MasterPanel: React.FC = () => {
 };
 
 /* ====================== Tarjeta ====================== */
-const TournamentCard: React.FC<{
+type TournamentCardProps = {
   t: Tournament;
-  nowMs: number;           /* nuevo: usamos nowMs para derivar remaining y progreso */
+  nowMs: number;
   timeFmt: TimeFmt;
   compact?: boolean;
   onEdit: () => void;
@@ -972,7 +1073,179 @@ const TournamentCard: React.FC<{
   duplicate: () => void;
   openDisplay: () => void;
   isDisplayOpen: boolean;
-}> = ({ t, nowMs, timeFmt, compact, onEdit, onChange, startRound, startBreak, skipBreak, pause, resume, reset, add1, add5, sub1, sub5, restartRound, prevRound, completeRound, nextRound, remove, duplicate, openDisplay, isDisplayOpen }) => {
+};
+
+const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, onEdit, onChange, startRound, startBreak, skipBreak, pause, resume, reset, add1, add5, sub1, sub5, restartRound, prevRound, completeRound, nextRound, remove, duplicate, openDisplay, isDisplayOpen }) => {
+  const { inRound, currentIndex, roundsLeftAfterCurrent } = useMemo(() => computeRoundsInfo(t), [t]);
+  const remainingMs = getRemainingMs(t, nowMs);
+  const expired = !t.timer.running && t.timer.target !== null && remainingMs <= 0;
+  const status = expired ? 'Terminado' : t.timer.running ? 'En curso' : t.timer.target ? 'Pausado' : 'Sin iniciar';
+  const colorCss = COLOR[gameColorKey(t.game)];
+  const schedule = computeSchedule(t, timeFmt, nowMs);
+  const totalSecs = Math.max(0, Math.floor(remainingMs / 1000));
+  const phaseTotalSecs = t.timer.mode === 'break' ? (t.breakMinutes * 60) : (t.roundMinutes * 60);
+  const progress = phaseTotalSecs > 0 ? Math.min(100, Math.max(0, 100 - Math.round((totalSecs / phaseTotalSecs) * 100))) : 0;
+  const eta = computeETAClock(t, timeFmt, nowMs);
+  const quickMinutes = [30,40,45,50,60];
+  const phaseLabel = t.timer.mode === 'break' ? 'Break' : inRound ? `Ronda ${currentIndex}` : `Ronda ${Math.min(currentIndex + 1, t.roundsTotal)}`;
+
+  return (
+    <article className="card h-100 bg-body border-0 shadow-sm" style={{borderLeft: `6px solid ${colorCss}`, minWidth: 0}}>
+      <header className="card-header bg-body border-0 py-2" style={{minWidth: 0}}>
+        <div className="d-flex align-items-center gap-2 flex-wrap" style={{minWidth: 0}}>
+          <span className="badge" style={{backgroundColor: colorCss}}>{t.game}</span>
+          <span className="text-secondary small text-truncate" style={{minWidth: 0}}>
+            {phaseLabel} • {t.roundsCompleted}/{t.roundsTotal}
+          </span>
+          <div className="ms-auto d-flex gap-1 flex-wrap">
+            <button className="btn btn-sm btn-outline-light" onClick={onEdit} title="Editar">✎</button>
+            <button className={`btn btn-sm ${isDisplayOpen ? 'btn-secondary' : 'btn-outline-light'}`} onClick={openDisplay} title="Display">🖥</button>
+            <button className="btn btn-sm btn-outline-light" onClick={duplicate} title="Duplicar">⧉</button>
+            <button className="btn btn-sm btn-outline-danger" onClick={remove} title="Eliminar">🗑</button>
+          </div>
+        </div>
+      </header>
+
+      <div className="card-body d-flex flex-column gap-3">
+        <input aria-label="Nombre del torneo" className="form-control form-control-sm fw-semibold" value={t.name} onChange={e=>onChange({ name: e.target.value })} />
+
+        <div className="d-flex flex-wrap align-items-start gap-3">
+          <div className="d-flex flex-column">
+            <span className="text-secondary small">Tiempo restante</span>
+            <span className={`fw-bold ${expired ? 'text-danger' : ''}`} style={{fontVariantNumeric:'tabular-nums', fontSize:'2rem', lineHeight:1.1, color: expired ? undefined : colorCss}}>{format(remainingMs)}</span>
+            <span className="text-secondary small">Estado: {status}</span>
+          </div>
+          <div className="d-flex flex-column">
+            <span className="text-secondary small">Fase actual</span>
+            <span className="fw-semibold">{phaseLabel}</span>
+            <span className="text-secondary small">Objetivo: {t.timer.target ? dayjs(t.timer.target).format(fmtClock(timeFmt)) : '-'}</span>
+          </div>
+          <div className="ms-auto text-end small text-secondary">
+            <div>ETA global: <strong className="ms-1 text-light">{eta}</strong></div>
+            <div>Rondas restantes: {roundsLeftAfterCurrent}</div>
+          </div>
+        </div>
+
+        <div className="progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+          <div className="progress-bar" style={{width: `${progress}%`, backgroundColor: colorCss}}></div>
+        </div>
+
+        {schedule.length > 0 && (
+          <div className="d-flex flex-wrap gap-2">
+            {schedule.map((it, i) => (
+              <span key={i} className="badge text-bg-secondary">
+                <span className="me-1">{it.label}:</span>
+                <strong>{it.time}</strong>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="d-flex flex-wrap gap-2">
+          {t.timer.running ? (
+            <>
+              <button className="btn btn-sm btn-warning px-3" onClick={pause}>⏸ Pausar</button>
+              <div className="btn-group btn-group-sm" role="group">
+                <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
+                <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
+                <button className="btn btn-outline-light" onClick={add1}>+1m</button>
+                <button className="btn btn-outline-light" onClick={add5}>+5m</button>
+              </div>
+            </>
+          ) : !t.timer.running && t.timer.target !== null && remainingMs > 0 ? (
+            <>
+              <button className="btn btn-sm btn-success px-3" onClick={resume}>▶ Reanudar</button>
+              <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-sm btn-primary px-3" onClick={()=>startRound()}>▶ Iniciar</button>
+              {t.breakEnabled && t.breakMinutes > 0 && (
+                <button className="btn btn-sm btn-outline-light px-3" onClick={startBreak}>☕ Break</button>
+              )}
+              {expired && (
+                <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
+              )}
+            </>
+          )}
+          {t.timer.mode === 'break' && t.timer.running && (
+            <button className="btn btn-sm btn-outline-light px-3" onClick={skipBreak}>⏭ Omitir break</button>
+          )}
+        </div>
+
+        <details className="simple-panel__details mt-1">
+          <summary>Controles avanzados</summary>
+          <div className="pt-2 d-flex flex-column gap-3">
+            <div className="row g-2">
+              <div className="col-6">
+                <label className="form-label small mb-1">Rondas totales</label>
+                <input type="number" className="form-control form-control-sm" value={t.roundsTotal} min={1} onChange={e=>onChange({ roundsTotal: Math.max(1, Number(e.target.value)), roundsCompleted: Math.min(t.roundsCompleted, Math.max(1, Number(e.target.value))) })} />
+              </div>
+              <div className="col-6">
+                <label className="form-label small mb-1">Completadas</label>
+                <input type="number" className="form-control form-control-sm" value={t.roundsCompleted} min={0} max={t.roundsTotal} onChange={e=>onChange({ roundsCompleted: Math.min(Math.max(0, Number(e.target.value)), t.roundsTotal) })} />
+              </div>
+              <div className="col-6">
+                <label className="form-label small mb-1">Min/Ronda</label>
+                <input type="number" className="form-control form-control-sm" value={t.roundMinutes} min={1} onChange={e=>onChange({ roundMinutes: Math.max(1, Number(e.target.value)) })} />
+              </div>
+              <div className="col-6">
+                <label className="form-label small mb-1">Min próxima</label>
+                <input type="number" className="form-control form-control-sm" value={t.nextRoundMinutes ?? 0} min={0} onChange={e=>{ const v = Number(e.target.value); onChange({ nextRoundMinutes: v>0 ? v : null }); }} />
+              </div>
+            </div>
+
+            <div className="row g-2">
+              <div className="col-6">
+                <div className="form-check form-switch">
+                  <input className="form-check-input" type="checkbox" id={`simple-break-${t.id}`} checked={t.breakEnabled} onChange={e=>onChange({ breakEnabled: e.target.checked })} />
+                  <label className="form-check-label" htmlFor={`simple-break-${t.id}`}>Break habilitado</label>
+                </div>
+              </div>
+              <div className="col-6">
+                <label className="form-label small mb-1">Break (min)</label>
+                <input type="number" className="form-control form-control-sm" value={t.breakMinutes} min={0} disabled={!t.breakEnabled} onChange={e=>onChange({ breakMinutes: Math.max(0, Number(e.target.value)) })} />
+              </div>
+            </div>
+
+            <div className="form-check form-switch">
+              <input className="form-check-input" type="checkbox" id={`simple-auto-${t.id}`} checked={t.autoStartNext} onChange={e=>onChange({ autoStartNext: e.target.checked })} />
+              <label className="form-check-label" htmlFor={`simple-auto-${t.id}`}>Auto siguiente</label>
+            </div>
+
+            <div>
+              <label className="form-label small mb-1">Tema del display</label>
+              <select className="form-select form-select-sm" value={t.displayTheme || 'dark'} onChange={e=>onChange({ displayTheme: e.target.value as 'dark'|'light' })}>
+                <option value="dark">Oscuro</option>
+                <option value="light">Luz (claro)</option>
+              </select>
+            </div>
+
+            <div className="d-flex flex-wrap gap-1">
+              {quickMinutes.map(m => (
+                <button key={m} className="btn btn-sm btn-outline-light" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
+              ))}
+            </div>
+
+            <div className="d-flex flex-wrap gap-2">
+              <button className="btn btn-sm btn-outline-secondary" onClick={restartRound}>⟲ Reiniciar</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
+            </div>
+
+            <div>
+              <label className="form-label small mb-1" htmlFor={`simple-notes-${t.id}`}>Notas</label>
+              <textarea id={`simple-notes-${t.id}`} className="form-control form-control-sm" rows={2} maxLength={2000} value={t.notes || ''} placeholder="Notas del organizador..." onChange={e=>onChange({notes: e.target.value})}></textarea>
+            </div>
+          </div>
+        </details>
+      </div>
+    </article>
+  );
+};
+
+const TournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, compact, onEdit, onChange, startRound, startBreak, skipBreak, pause, resume, reset, add1, add5, sub1, sub5, restartRound, prevRound, completeRound, nextRound, remove, duplicate, openDisplay, isDisplayOpen }) => {
   const { inRound, currentIndex, roundsLeftAfterCurrent } = useMemo(() => computeRoundsInfo(t), [t]);
   const remainingMs = getRemainingMs(t, nowMs);
   const expired = !t.timer.running && t.timer.target !== null && remainingMs <= 0;

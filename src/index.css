@@ -165,11 +165,11 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 @media (min-width: 768px){ .hud-frame--compact{ padding:2.05rem 2.1rem !important; } }
 .hud-frame--expanded{ padding:2.5rem 2.45rem !important; border-radius:30px !important; }
 @media (min-width: 768px){ .hud-frame--expanded{ padding:3rem 3rem !important; } }
-.hud-columns{ display:grid; gap:1.6rem; align-items:start; }
+.hud-columns{ display:grid; gap:1.6rem; align-items:start; grid-template-columns:minmax(0,1fr); }
 .hud-columns> *{ min-width:0; }
 .hud-columns--compact{ gap:1.25rem; }
 .hud-columns--expanded{ gap:2.2rem; }
-@media (min-width: 1024px){
+@media (min-width: 1280px){
   .hud-columns{ grid-template-columns:minmax(0,1.12fr) minmax(0,0.88fr); }
   .hud-columns--compact{ grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr); }
   .hud-columns--expanded{ grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
@@ -408,7 +408,7 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 @keyframes sweep { to { background-position: 200% 0; } }
 
 /* ===== Round track ===== */
-.round-track{ position:relative; border-radius:1.5rem; padding:24px; border:1px solid var(--border-1); background: linear-gradient(140deg, rgba(12,16,35,.75), rgba(14,165,233,.08) 45%, transparent 80%); box-shadow: 0 18px 45px rgba(15,23,42,.45); overflow:hidden; isolation:isolate; }
+.round-track{ position:relative; border-radius:1.5rem; padding:24px; border:1px solid var(--border-1); background: linear-gradient(140deg, rgba(12,16,35,.75), rgba(14,165,233,.08) 45%, transparent 80%); box-shadow: 0 18px 45px rgba(15,23,42,.45); overflow:hidden; isolation:isolate; max-width:min(100%,560px); }
 .light .round-track{ background: linear-gradient(140deg, rgba(255,255,255,.88), rgba(224,242,254,.7) 50%, rgba(255,255,255,.94)); box-shadow: 0 20px 38px rgba(15,23,42,.12); border-color: rgba(15,23,42,.08); }
 .round-track::before{ content:""; position:absolute; inset:-60% -40%; background: radial-gradient(circle at 0% 0%, rgba(99,102,241,.35), transparent 65%); opacity:.65; }
 .round-track::after{ content:""; position:absolute; inset:auto -25%; top:-40%; height:220%; background: radial-gradient(circle at 80% 20%, rgba(14,165,233,.2), transparent 70%); opacity:.5; }
@@ -461,7 +461,18 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 @keyframes roundSpark{ 0%,100%{ transform: scale(.92); opacity:.55; } 50%{ transform: scale(1.05); opacity:.95; } }
 
 /* ===== Schedule card ===== */
-.schedule-card{ position:relative; overflow:hidden; border-radius:1.5rem; isolation:isolate; }
+.schedule-card{ position:relative; overflow:hidden; border-radius:1.5rem; isolation:isolate; max-width:min(100%,420px); }
+.hud-columns .schedule-card{ justify-self:end; }
+.hud-columns.hud-columns--compact .schedule-card{ max-width:min(100%,380px); }
+.hud-columns.hud-columns--expanded .schedule-card{ max-width:min(100%,460px); }
+.simple-panel__details{ border:1px solid rgba(148,163,184,.18); border-radius:12px; padding:0.5rem 0.75rem; background:rgba(15,23,42,.35); color:inherit; }
+.simple-panel__details summary{ cursor:pointer; list-style:none; font-weight:600; font-size:0.82rem; letter-spacing:.04em; text-transform:uppercase; color:rgba(226,232,240,.75); }
+.simple-panel__details summary::-webkit-details-marker{ display:none; }
+.simple-panel__details[open]{ background:rgba(148,163,184,.16); }
+.simple-panel__details > *:last-child{ margin-bottom:0; }
+.light .simple-panel__details{ background:rgba(255,255,255,.86); border-color:rgba(148,163,184,.45); }
+.light .simple-panel__details[open]{ background:rgba(255,255,255,.95); }
+.light .simple-panel__details summary{ color:rgba(15,23,42,.7); }
 .schedule-card::before{ content:""; position:absolute; inset:-45% -25%; background: radial-gradient(circle at 0% 0%, rgba(99,102,241,.28), transparent 70%); opacity:.55; }
 .schedule-card::after{ content:""; position:absolute; inset:auto -30%; top:-40%; height:220%; background: radial-gradient(circle at 75% 20%, rgba(236,72,153,.18), transparent 70%); opacity:.45; }
 .light .schedule-card::before{ opacity:.38; }

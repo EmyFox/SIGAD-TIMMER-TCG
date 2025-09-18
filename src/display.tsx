@@ -912,6 +912,22 @@ const Display: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const onStorage = (ev: StorageEvent) => {
+      if (!ev.key) return;
+      if (ev.storageArea !== window.localStorage) return;
+      if (ev.key === HUD_DENSITY_KEY) {
+        const next = parseDensity(ev.newValue);
+        if (next) setDensity(next);
+      } else if (ev.key === HUD_SCALE_KEY) {
+        const next = parseScale(ev.newValue);
+        if (next) setHudScale(clampScale(next));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
     const unsub = subscribeDisplay((s) => {
       setConnected(true);
       setTimeFmt(s.timeFmt);
