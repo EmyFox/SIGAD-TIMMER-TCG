@@ -10,61 +10,155 @@ import {
 } from "./displayChannel";
 import { BrandLogo } from "./BrandLogo";
 
+type HudDensity = "compact" | "standard" | "expanded";
+
+const HUD_DENSITY_KEY = "sigad-hud-density";
+
+const parseDensity = (value: string | null | undefined): HudDensity | null => {
+  return value === "compact" || value === "standard" || value === "expanded" ? value : null;
+};
+
 /* ==================== Iconos ==================== */
 const IconClock = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path stroke="currentColor" strokeWidth="1.5" d="M12 8v5l3 2" />
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+    <circle
+      cx="12"
+      cy="12"
+      r="9"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.88}
+    />
+    <path
+      d="M12 6.75v5.3l3.2 1.9"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="2.25" fill="currentColor" opacity={0.16} />
+    <path
+      d="M12 3.5v1.4m0 14.2v1.4m8.5-8.5h-1.4m-14.2 0H3.5"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      opacity={0.45}
+    />
   </svg>
 );
 const IconTarget = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    <circle
+      cx="12"
+      cy="12"
+      r="9"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.8}
+    />
+    <circle
+      cx="12"
+      cy="12"
+      r="4.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.9}
+    />
+    <path
+      d="M12 7.25v9.5M7.25 12h9.5"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      opacity={0.55}
+    />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
   </svg>
 );
 const IconCoffee = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
     <path
-      d="M3 8h13v5a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8Z"
+      d="M4.75 8.5h11.5v4.6A4.9 4.9 0 0 1 11.4 18h-1.3a4.9 4.9 0 0 1-4.9-4.9V8.5Z"
       stroke="currentColor"
       strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
-    <path d="M16 9h2.5a2.5 2.5 0 1 1 0 5H16" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M16.25 9h2.2a2.55 2.55 0 0 1 0 5.1H16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     <path
       d="M7 4s1 1 0 2m4-2s1 1 0 2m4-2s1 1 0 2"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
     />
+    <path d="M7 19.25h7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity={0.55} />
   </svg>
 );
 const IconPlay = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="m8 5 12 7-12 7V5Z" fill="currentColor" />
+    <path d="m9 6 9 6-9 6V6Z" fill="currentColor" />
+    <path
+      d="M12 3.75c4.55 0 8.25 3.7 8.25 8.25s-3.7 8.25-8.25 8.25S3.75 16.55 3.75 12 7.45 3.75 12 3.75Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.55}
+    />
   </svg>
 );
 const IconTrophy = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
     <path
-      d="M6 3h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V3Z"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    />
-    <path d="M9 21h6M9 18h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path
-      d="M18 6h2a2 2 0 0 1-2 2M6 6H4a2 2 0 0 0 2 2"
+      d="M6.5 4h11v2.4a5.5 5.5 0 0 1-5.5 5.5h-0a5.5 5.5 0 0 1-5.5-5.5V4Z"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M9.25 20.25h5.5m-5.5-2.8h5.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <path
+      d="M17.5 6.4h2.15a2.35 2.35 0 0 1-2.35 2.35M6.5 6.4H4.35A2.35 2.35 0 0 0 6.7 8.75"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
 const IconLayers = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="M12 3 3 8l9 5 9-5-9-5Z" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M3 12l9 5 9-5M3 16l9 5 9-5" stroke="currentColor" strokeWidth="1.5" opacity=".6" />
+    <path
+      d="M12 3.6 4.2 8l7.8 4.4L19.8 8 12 3.6Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4.2 12.1 12 16.5l7.8-4.4M4.2 16.2 12 20.6l7.8-4.4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.65}
+    />
   </svg>
 );
 const IconSparkles = (p: React.SVGProps<SVGSVGElement>) => (
@@ -73,10 +167,11 @@ const IconSparkles = (p: React.SVGProps<SVGSVGElement>) => (
       d="M12 3.5 13.4 7l3.6 1.2L13.4 9.4 12 13l-1.4-3.6L7 8.2 10.6 7 12 3.5Z"
       stroke="currentColor"
       strokeWidth="1.5"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path d="M5.5 4.5 6.2 6.6 8.3 7.3 6.2 8 5.5 10.1 4.8 8 2.7 7.3 4.8 6.6 5.5 4.5Z" fill="currentColor" opacity=".45" />
-    <path d="m18.6 13.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" fill="currentColor" opacity=".45" />
+    <path d="M5.5 4.5 6.2 6.6 8.3 7.3 6.2 8 5.5 10.1 4.8 8 2.7 7.3 4.8 6.6 5.5 4.5Z" fill="currentColor" opacity=".38" />
+    <path d="m18.6 13.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" fill="currentColor" opacity=".38" />
   </svg>
 );
 const IconBolt = (p: React.SVGProps<SVGSVGElement>) => (
@@ -86,14 +181,21 @@ const IconBolt = (p: React.SVGProps<SVGSVGElement>) => (
       fill="currentColor"
       stroke="currentColor"
       strokeWidth="1.2"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
 const IconFlag = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="M5 3v18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M5 4.5h11l-1.6 3.5 1.6 3.5H5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M5 3.25v17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path
+      d="M5 4.75h10.6l-1.5 3.4 1.5 3.4H5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 /* ==================== Helpers ==================== */
@@ -168,62 +270,101 @@ const Pill = ({ children, isLight }: PillProps) => (
   </span>
 );
 
-interface StatCardProps { label: string; children: React.ReactNode; isLight: boolean }
-const StatCard = ({ label, children, isLight }: StatCardProps) => (
-  <div
-    className={pick(
-      isLight,
-      "rounded-xl border border-zinc-200 bg-white/80 shadow-sm p-4 transition-colors hover:bg-white",
-      "rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-colors hover:bg-zinc-900/70"
-    )}
-  >
-    <div className={pick(isLight, "text-zinc-600 text-[13px]", "text-zinc-400 text-[13px]")}>{label}</div>
-    <div className={pick(isLight, "mt-1.5 font-semibold text-zinc-900", "mt-1.5 font-semibold text-zinc-100")}>{children}</div>
-  </div>
-);
+interface StatCardProps {
+  label: string;
+  children: React.ReactNode;
+  isLight: boolean;
+  density: HudDensity;
+}
+const StatCard = ({ label, children, isLight, density }: StatCardProps) => {
+  const baseClass = pick(
+    isLight,
+    "rounded-xl border border-zinc-200 bg-white/80 shadow-sm transition-colors hover:bg-white",
+    "rounded-xl border border-zinc-800 bg-zinc-900/50 transition-colors hover:bg-zinc-900/70"
+  );
+  const paddingClass = density === "compact" ? "p-3" : density === "expanded" ? "p-5" : "p-4";
+  const labelClass = pick(
+    isLight,
+    `${density === "compact" ? "text-[12px]" : "text-[13px]"} text-zinc-600`,
+    `${density === "compact" ? "text-[12px]" : "text-[13px]"} text-zinc-400`
+  );
+  const valueMargin = density === "compact" ? "mt-1" : density === "expanded" ? "mt-2" : "mt-1.5";
+  const valueSize = density === "compact" ? "text-[15px]" : density === "expanded" ? "text-lg" : "text-base";
+  const valueClass = pick(
+    isLight,
+    `${valueMargin} font-semibold text-zinc-900 ${valueSize}`,
+    `${valueMargin} font-semibold text-zinc-100 ${valueSize}`
+  );
+
+  return (
+    <div className={`${baseClass} ${paddingClass}`}>
+      <div className={labelClass}>{label}</div>
+      <div className={valueClass}>{children}</div>
+    </div>
+  );
+};
 
 const TimeBlock = ({
   value,
   label,
   accent,
   isLight,
+  density,
 }: {
   value: string;
   label: string;
   accent: "indigo" | "amber";
   isLight: boolean;
-}) => (
-  <div className="group relative overflow-hidden rounded-2xl hud-corners time-ambient">
-    <div className={`neon-border ${accent === "amber" ? "neon-amber" : "neon-indigo"}`} />
-    <div
-      className={pick(
-        isLight,
-        "relative z-10 rounded-2xl bg-zinc-50 px-5 py-4 md:px-6 md:py-5",
-        "relative z-10 rounded-2xl bg-zinc-900/60 px-5 py-4 md:px-6 md:py-5"
-      )}
-    >
+  density: HudDensity;
+}) => {
+  const paddingClass =
+    density === "compact"
+      ? "px-4 py-3 md:px-5 md:py-4"
+      : density === "expanded"
+      ? "px-7 py-6 md:px-8 md:py-7"
+      : "px-5 py-4 md:px-6 md:py-5";
+  const numberClass =
+    density === "compact"
+      ? "text-4xl md:text-5xl"
+      : density === "expanded"
+      ? "text-6xl md:text-8xl"
+      : "text-5xl md:text-7xl";
+  const labelMargin = density === "expanded" ? "mt-1.5" : density === "compact" ? "mt-1" : "mt-1.5";
+  const labelSize = density === "compact" ? "text-[11px]" : "text-xs";
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl hud-corners time-ambient">
+      <div className={`neon-border ${accent === "amber" ? "neon-amber" : "neon-indigo"}`} />
       <div
         className={pick(
           isLight,
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-900",
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-100"
-        )}
-        style={{ fontFeatureSettings: "'tnum' on", fontVariantNumeric: "tabular-nums" }}
-      >
-        {value}
-      </div>
-      <div
-        className={pick(
-          isLight,
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500",
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-400"
+          `relative z-10 rounded-2xl bg-zinc-50 ${paddingClass}`,
+          `relative z-10 rounded-2xl bg-zinc-900/60 ${paddingClass}`
         )}
       >
-        {label}
+        <div
+          className={pick(
+            isLight,
+            `tabular-nums font-black leading-none tracking-tight ${numberClass} animate-flipTick will-change-transform digit-glow text-zinc-900`,
+            `tabular-nums font-black leading-none tracking-tight ${numberClass} animate-flipTick will-change-transform digit-glow text-zinc-100`
+          )}
+          style={{ fontFeatureSettings: "'tnum' on", fontVariantNumeric: "tabular-nums" }}
+        >
+          {value}
+        </div>
+        <div
+          className={pick(
+            isLight,
+            `${labelMargin} ${labelSize} uppercase tracking-[0.24em] text-zinc-500`,
+            `${labelMargin} ${labelSize} uppercase tracking-[0.24em] text-zinc-400`
+          )}
+        >
+          {label}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = ({
   count,
@@ -266,19 +407,29 @@ interface RoundTrackProps {
   isLight: boolean;
   accent: "round" | "break";
   stateLabel: string;
+  density: HudDensity;
 }
 
-const RoundTrack: React.FC<RoundTrackProps> = ({ total, current, completed, isLight, accent, stateLabel }) => {
+const RoundTrack: React.FC<RoundTrackProps> = ({
+  total,
+  current,
+  completed,
+  isLight,
+  accent,
+  stateLabel,
+  density,
+}) => {
   const safeTotal = Math.max(1, total);
   const safeCurrent = Math.min(safeTotal, Math.max(1, current));
   const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
-  const maxDots = 12;
+  const maxDots = density === "expanded" ? 14 : density === "compact" ? 8 : 12;
   let start = Math.max(1, safeCurrent - Math.floor(maxDots / 2));
   let end = Math.min(safeTotal, start + maxDots - 1);
   start = Math.max(1, end - maxDots + 1);
   end = Math.min(safeTotal, start + maxDots - 1);
-  const showLead = start > 1;
-  const showTail = end < safeTotal;
+  const isCrowdedRange = safeTotal > maxDots;
+  const showLead = !isCrowdedRange && start > 1;
+  const showTail = !isCrowdedRange && end < safeTotal;
   const nodes = [] as number[];
   for (let idx = start; idx <= end; idx++) nodes.push(idx);
 
@@ -294,25 +445,35 @@ const RoundTrack: React.FC<RoundTrackProps> = ({ total, current, completed, isLi
     return "Seguimiento visual del avance global de todas las rondas.";
   })();
 
+  const subtitleText = density === "compact" ? (accent === "break" ? "Break" : "Rondas") : accent === "break" ? "Tiempo de descanso" : "Mapa de rondas";
+  const titleText = density === "compact" ? (accent === "break" ? "Descanso en curso" : "Avance del torneo") : accent === "break" ? "Break panorámico" : "Avance general";
+  const metaText = density === "compact" ? `${safeCompleted}/${safeTotal}` : `${safeCompleted}/${safeTotal} completadas`;
+
+  const classes = [
+    "round-track",
+    isLight ? "round-track--light" : "",
+    accent === "break" ? "round-track--break" : "",
+    density === "compact" ? "round-track--density-compact" : "",
+    density === "expanded" ? "round-track--density-expanded" : "",
+    safeTotal <= 8 ? "round-track--mini" : "",
+    isCrowdedRange ? "round-track--crowded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const showCaption = density !== "compact" || isCrowdedRange;
+
   return (
     <div
-      className={["round-track", isLight ? "round-track--light" : "", accent === "break" ? "round-track--break" : ""].join(
-        " "
-      )}
+      className={classes}
     >
       <div className="round-track__header">
         <span className="round-track__icon">{accentIcon}</span>
         <div>
-          <span className="round-track__subtitle">
-            {accent === "break" ? "Tiempo de descanso" : "Mapa de rondas"}
-          </span>
-          <div className="round-track__title">
-            {accent === "break" ? "Break panorámico" : "Avance general"}
-          </div>
+          <span className="round-track__subtitle">{subtitleText}</span>
+          <div className="round-track__title">{titleText}</div>
         </div>
-        <span className="round-track__meta">
-          {safeCompleted}/{safeTotal} completadas
-        </span>
+        <span className="round-track__meta">{metaText}</span>
       </div>
       <div className="round-track__rail" role="list" aria-label="Avance de rondas">
         {showLead && (
@@ -349,7 +510,7 @@ const RoundTrack: React.FC<RoundTrackProps> = ({ total, current, completed, isLi
           </span>
         )}
       </div>
-      <p className="round-track__caption">{description}</p>
+      {showCaption && <p className="round-track__caption">{description}</p>}
     </div>
   );
 };
@@ -367,6 +528,7 @@ interface ProgressPanelProps {
   roundMinutes: number;
   breakMinutes: number;
   breakEnabled: boolean;
+  density: HudDensity;
 }
 
 const ProgressPanel: React.FC<ProgressPanelProps> = ({
@@ -382,6 +544,7 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
   roundMinutes,
   breakMinutes,
   breakEnabled,
+  density,
 }) => {
   const palette = useMemo(() => {
     if (accent === "amber") {
@@ -436,8 +599,18 @@ const ProgressPanel: React.FC<ProgressPanelProps> = ({
   const freezeMotion = transitionClass === "no-transition";
   const fillMotionClass = freezeMotion ? "no-transition" : "transition-width";
 
+  const densityClass =
+    density === "compact"
+      ? "progress-panel--compact"
+      : density === "expanded"
+      ? "progress-panel--expanded"
+      : "";
+
   return (
-    <div className={["progress-panel", isLight ? "progress-panel--light" : ""].join(" ")} style={accentStyle}>
+    <div
+      className={["progress-panel", isLight ? "progress-panel--light" : "", densityClass].filter(Boolean).join(" ")}
+      style={accentStyle}
+    >
       <span className="progress-panel__halo" aria-hidden />
       <div className="progress-panel__header">
         <span className="progress-panel__icon">{icon}</span>
@@ -655,6 +828,18 @@ const Display: React.FC = () => {
   const [connected, setConnected] = useState(false); // reservado por si muestras estado de conexión
   const [page, setPage] = useState(0);
 
+  const [density, setDensity] = useState<HudDensity>(() => {
+    const param = parseDensity(getParam("hud"));
+    if (param) return param;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = parseDensity(window.localStorage.getItem(HUD_DENSITY_KEY));
+        if (stored) return stored;
+      } catch {}
+    }
+    return "standard";
+  });
+
   const fixedId = useRef<string | null>(getParam("id"));
   const disableFX = getParam("nofx") === "1";
 
@@ -662,6 +847,26 @@ const Display: React.FC = () => {
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HUD_DENSITY_KEY, density);
+    } catch {}
+  }, [density]);
+
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.origin && ev.origin !== window.location.origin) return;
+      const data = ev.data as { type?: string; value?: unknown } | null;
+      if (data?.type === "HUD_DENSITY") {
+        const raw = typeof data.value === "string" ? data.value : null;
+        const next = parseDensity(raw);
+        if (next) setDensity(next);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
   useEffect(() => {
@@ -758,14 +963,56 @@ const Display: React.FC = () => {
     return () => clearInterval(id);
   }, [pages.length]);
 
+  const shellClass = [
+    pick(
+      isLight ?? false,
+      "min-h-screen w-full relative overflow-hidden light text-zinc-900 bg-gradient-to-b from-white via-zinc-50 to-zinc-100",
+      "min-h-screen w-full relative overflow-hidden text-zinc-100 bg-gradient-to-b from-slate-950 via-neutral-950 to-black"
+    ),
+    `hud-density-${density}`,
+  ].join(" ");
+
+  const frameDensityClass =
+    density === "compact"
+      ? "hud-frame--compact"
+      : density === "expanded"
+      ? "hud-frame--expanded"
+      : "";
+
+  const headingClass = pick(
+    !!isLight,
+    `${
+      density === "compact"
+        ? "mb-4 text-[1.7rem] md:text-[2.45rem]"
+        : density === "expanded"
+        ? "mb-6 text-[2.5rem] md:text-[3.35rem]"
+        : "mb-5 text-2xl md:text-4xl"
+    } font-extrabold tracking-tight text-balance text-zinc-900`,
+    `${
+      density === "compact"
+        ? "mb-4 text-[1.7rem] md:text-[2.45rem]"
+        : density === "expanded"
+        ? "mb-6 text-[2.5rem] md:text-[3.35rem]"
+        : "mb-5 text-2xl md:text-4xl"
+    } font-extrabold tracking-tight text-balance`
+  );
+
+  const timeGridClass = `grid grid-cols-3 ${
+    density === "compact" ? "gap-3 mb-5" : density === "expanded" ? "gap-6 mb-8" : "gap-4 mb-7"
+  }`;
+  const statsGridClass = `grid grid-cols-1 md:grid-cols-3 ${
+    density === "compact" ? "gap-3 mb-5 text-[13px]" : density === "expanded" ? "gap-5 mb-7 text-[15px]" : "gap-4 mb-6 text-sm"
+  }`;
+  const focusGridBase =
+    density === "compact"
+      ? "grid grid-cols-1 gap-3 mb-5"
+      : density === "expanded"
+      ? "grid grid-cols-1 gap-5 mb-7"
+      : "grid grid-cols-1 gap-4 mb-6";
+  const scheduleMargin = density === "compact" ? "mt-4" : density === "expanded" ? "mt-6" : "mt-5";
+
   return (
-    <div
-      className={pick(
-        isLight ?? false,
-        "min-h-screen w-full relative overflow-hidden light text-zinc-900 bg-gradient-to-b from-white via-zinc-50 to-zinc-100",
-        "min-h-screen w-full relative overflow-hidden text-zinc-100 bg-gradient-to-b from-slate-950 via-neutral-950 to-black"
-      )}
-    >
+    <div className={shellClass} data-density={density}>
       {/* Fondo */}
       <div className="pointer-events-none absolute inset-0">
         <div
@@ -824,11 +1071,16 @@ const Display: React.FC = () => {
         {/* HUD principal */}
         {active && (
           <section
-            className={pick(
-              isLight ?? false,
-              "relative overflow-hidden rounded-3xl border border-zinc-200 bg-white/70 shadow-sm backdrop-blur p-6 md:p-8 hud-frame sweep",
-              "relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 hud-frame sweep"
-            )}
+            className={[
+              pick(
+                isLight ?? false,
+                "relative overflow-hidden rounded-3xl border border-zinc-200 bg-white/70 shadow-sm backdrop-blur p-6 md:p-8 hud-frame sweep",
+                "relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 hud-frame sweep"
+              ),
+              frameDensityClass,
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             {/* Encabezado */}
             <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -848,13 +1100,7 @@ const Display: React.FC = () => {
             </div>
 
             {/* Título */}
-            <h1
-              className={pick(
-                !!isLight,
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance text-zinc-900",
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance"
-              )}
-            >
+            <h1 className={headingClass}>
               <span
                 className={pick(
                   !!isLight,
@@ -867,15 +1113,33 @@ const Display: React.FC = () => {
             </h1>
 
             {/* HH : MM : SS */}
-            <div className="grid grid-cols-3 gap-4 mb-7" aria-live="polite">
-              <TimeBlock value={h} label="HORAS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={m} label="MINUTOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={s} label="SEGUNDOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
+            <div className={timeGridClass} aria-live="polite">
+              <TimeBlock
+                value={h}
+                label="HORAS"
+                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                isLight={!!isLight}
+                density={density}
+              />
+              <TimeBlock
+                value={m}
+                label="MINUTOS"
+                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                isLight={!!isLight}
+                density={density}
+              />
+              <TimeBlock
+                value={s}
+                label="SEGUNDOS"
+                accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                isLight={!!isLight}
+                density={density}
+              />
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-sm">
-              <StatCard label="Estado" isLight={!!isLight}>
+            <div className={statsGridClass}>
+              <StatCard label="Estado" isLight={!!isLight} density={density}>
                 <span
                   className={(() => {
                     const base = "inline-flex items-center gap-2";
@@ -902,7 +1166,7 @@ const Display: React.FC = () => {
                 </span>
               </StatCard>
 
-              <StatCard label="ETA fin torneo" isLight={!!isLight}>
+              <StatCard label="ETA fin torneo" isLight={!!isLight} density={density}>
                 {(() => {
                   const perRound = active.roundMinutes * 60_000;
                   const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
@@ -919,7 +1183,7 @@ const Display: React.FC = () => {
                 })()}
               </StatCard>
 
-              <StatCard label="Break" isLight={!!isLight}>
+              <StatCard label="Break" isLight={!!isLight} density={density}>
                 <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-700", "inline-flex items-center gap-2 text-zinc-200")}>
                   <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
                   {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
@@ -929,7 +1193,10 @@ const Display: React.FC = () => {
 
             {/* Focus cards */}
             <div
-              className={["grid grid-cols-1 gap-4 mb-6", trackData ? "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" : ""].join(
+              className={[
+                focusGridBase,
+                trackData ? "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]" : "",
+              ].join(
                 " "
               )}
             >
@@ -947,6 +1214,7 @@ const Display: React.FC = () => {
                   roundMinutes={active.roundMinutes}
                   breakMinutes={active.breakMinutes}
                   breakEnabled={active.breakEnabled}
+                  density={density}
                 />
               )}
               {trackData && (
@@ -957,6 +1225,7 @@ const Display: React.FC = () => {
                   isLight={!!isLight}
                   accent={trackAccent}
                   stateLabel={stateLabel}
+                  density={density}
                 />
               )}
             </div>
@@ -967,15 +1236,18 @@ const Display: React.FC = () => {
                 className={[
                   pick(
                     !!isLight,
-                    "mt-5 rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
-                    "mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
+                    `${scheduleMargin} rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm`,
+                    `${scheduleMargin} rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5`
                   ),
                   "schedule-card",
+                  density === "compact" ? "schedule-card--compact" : "",
+                  density === "expanded" ? "schedule-card--expanded" : "",
+                  schedule.length <= 2 ? "schedule-card--tight" : "",
                 ].join(" ")}
               >
                 <div className="schedule-card__header">
                   <span className="schedule-card__subtitle">Próximos hitos</span>
-                  <span className="schedule-card__hint">Actualiza automáticamente al cerrar cada ronda</span>
+                  <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
                 </div>
                 <div className="schedule-card__list">
                   {schedule.map((it, i) => (

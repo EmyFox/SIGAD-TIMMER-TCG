@@ -160,6 +160,14 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 @keyframes uxPing{ 0%{ transform: scale(.6); opacity:.65; } 80%{ transform: scale(var(--status-ping-scale)); opacity:0; } 100%{ transform: scale(var(--status-ping-scale)); opacity:0; } }
 .hud-topbar .status-ping, .hud-frame .status-ping{ animation: uxPing 1.8s cubic-bezier(0,0,.2,1) infinite; }
 
+/* ===== Densidad HUD (compacto / expandido) ===== */
+.hud-frame--compact{ padding:1.6rem 1.55rem !important; border-radius:22px !important; }
+@media (min-width: 768px){ .hud-frame--compact{ padding:2.05rem 2.1rem !important; } }
+.hud-frame--expanded{ padding:2.5rem 2.45rem !important; border-radius:30px !important; }
+@media (min-width: 768px){ .hud-frame--expanded{ padding:3rem 3rem !important; } }
+.hud-density-compact .ux-header{ margin-bottom:1.4rem !important; }
+.hud-density-expanded .ux-header{ margin-bottom:2.3rem !important; }
+
 /* ===== Ribbon / brand shine ===== */
 .ribbon { position:relative; overflow:hidden; }
 .ribbon::before{
@@ -193,7 +201,7 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 /* =========================================================
    PROGRESO: panel + barra holográfica
    ========================================================= */
-.progress-panel{
+.progress-panel{ 
   --progress: 0;
   --accent-start: var(--accent-1);
   --accent-mid: var(--accent-2);
@@ -210,12 +218,26 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
   overflow:hidden;
   isolation:isolate;
 }
-.light .progress-panel{
+.light .progress-panel{ 
   background: linear-gradient(155deg, rgba(255,255,255,.94) 0%, rgba(248,250,252,.86) 55%, rgba(244,244,245,.78) 100%);
   border-color: rgba(15,23,42,.08);
   box-shadow: 0 26px 40px rgba(15,23,42,.18);
 }
-.progress-panel::after{
+.progress-panel--compact{ padding:20px 22px 22px; border-radius:22px; gap:18px; }
+.progress-panel--compact .progress-panel__header{ gap:14px; }
+.progress-panel--compact .progress-panel__icon{ width:46px; height:46px; border-radius:16px; box-shadow: 0 16px 30px color-mix(in srgb, var(--accent-mid), transparent 55%); }
+.progress-panel--compact .progress-panel__chip{ padding:8px 12px; border-radius:14px; gap:8px; }
+.progress-panel--compact .progress-panel__chipIcon{ width:22px; height:22px; border-radius:9px; }
+.progress-panel--compact .progress-panel__title{ font-size:1.16rem; }
+.progress-panel--compact .progress-panel__legend{ gap:14px; }
+.progress-panel--compact .progress-panel__fact strong{ font-size:.95rem; }
+.progress-panel--compact .progress-panel__fact small{ font-size:.68rem; letter-spacing:.26em; }
+.progress-panel--expanded{ padding:32px 34px 34px; border-radius:30px; gap:28px; }
+.progress-panel--expanded .progress-panel__icon{ width:60px; height:60px; border-radius:20px; box-shadow: 0 26px 48px color-mix(in srgb, var(--accent-mid), transparent 45%); }
+.progress-panel--expanded .progress-panel__chip{ padding:12px 18px; border-radius:18px; gap:12px; }
+.progress-panel--expanded .progress-panel__chipIcon{ width:30px; height:30px; }
+.progress-panel--expanded .progress-panel__title{ font-size:1.45rem; }
+.progress-panel::after{ 
   content:""; position:absolute; inset:12px; border-radius:24px; pointer-events:none;
   border:1px solid rgba(255,255,255,.04); opacity:.45; mix-blend-mode: screen;
 }
@@ -392,6 +414,26 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 .round-track__spark--trail{ opacity:.45; }
 .round-track__caption{ position:relative; z-index:1; margin-top:18px; font-size:.85rem; line-height:1.6; color: var(--text-3); max-width:48ch; }
 .light .round-track__caption{ color: color-mix(in srgb, var(--text-3), black 15%); }
+.round-track--density-compact{ padding:20px; border-radius:22px; }
+.round-track--density-compact .round-track__header{ gap:12px; margin-bottom:14px; }
+.round-track--density-compact .round-track__subtitle{ letter-spacing:.24em; font-size:.64rem; }
+.round-track--density-compact .round-track__title{ font-size:1rem; }
+.round-track--density-compact .round-track__meta{ font-size:.64rem; padding:3px 8px; letter-spacing:.12em; }
+.round-track--density-compact .round-track__rail{ gap:8px; }
+.round-track--density-compact .round-track__caption{ margin-top:12px; font-size:.78rem; max-width:40ch; }
+.round-track--density-expanded{ padding:30px; border-radius:30px; }
+.round-track--density-expanded .round-track__header{ margin-bottom:22px; }
+.round-track--density-expanded .round-track__title{ font-size:1.18rem; }
+.round-track--mini .round-track__icon{ width:40px; height:40px; border-radius:14px; box-shadow: 0 12px 26px rgba(59,130,246,.28); }
+.round-track--mini.round-track--break .round-track__icon{ box-shadow: 0 12px 26px rgba(251,191,36,.28); }
+.round-track--mini .round-track__title{ font-size:.96rem; }
+.round-track--mini .round-track__node{ min-width:36px; border-radius:12px; font-size:.72rem; flex:0 1 36px; }
+.round-track--mini .round-track__node::after{ width:18px; }
+.round-track--density-compact .round-track__meta{ box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.round-track--crowded .round-track__rail{ flex-wrap:wrap; gap:8px 10px; }
+.round-track--crowded .round-track__node{ flex:0 1 42px !important; min-width:42px; }
+.round-track--crowded .round-track__node::after{ display:none; }
+.round-track--crowded .round-track__ellipsis{ display:none; }
 @keyframes roundSpark{ 0%,100%{ transform: scale(.92); opacity:.55; } 50%{ transform: scale(1.05); opacity:.95; } }
 
 /* ===== Schedule card ===== */
@@ -418,6 +460,19 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 .schedule-chip__time{ font-size:1rem; font-weight:600; color: var(--text-1); letter-spacing:.04em; }
 .schedule-chip--active .schedule-chip__time{ color:#fdf4ff; }
 .light .schedule-chip--active .schedule-chip__time{ color:#1e1b4b; }
+.schedule-card--compact{ padding:18px !important; border-radius:22px !important; }
+.schedule-card--compact .schedule-card__header{ margin-bottom:12px; }
+.schedule-card--compact .schedule-card__list{ gap:10px; }
+.schedule-card--compact .schedule-chip{ padding:10px 14px; border-radius:16px; gap:10px; }
+.schedule-card--compact .schedule-chip__icon{ width:34px; height:34px; border-radius:12px; box-shadow: 0 10px 20px rgba(99,102,241,.22); }
+.schedule-card--compact .schedule-chip__label{ font-size:.74rem; }
+.schedule-card--compact .schedule-chip__time{ font-size:.92rem; }
+.schedule-card--tight .schedule-card__list{ flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; }
+.schedule-card--tight .schedule-chip{ flex:1 0 auto; min-width:0; }
+.schedule-card--tight .schedule-chip__time{ white-space:nowrap; }
+.schedule-card--expanded{ padding:26px !important; border-radius:30px !important; }
+.schedule-card--expanded .schedule-chip{ padding:14px 18px; }
+.schedule-card--expanded .schedule-chip__icon{ width:44px; height:44px; border-radius:16px; }
 
 .hud-topbar { position: relative; }
 .hud-topbar::after { content: ""; position: absolute; inset-inline: 12px; bottom: -1px; height: 1px; opacity:.5; background: linear-gradient(90deg, transparent, rgba(99,102,241,.32), transparent); }

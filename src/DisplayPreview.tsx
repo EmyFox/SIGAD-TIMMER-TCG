@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { emitAll, type TimeFmt } from './displayChannel';
 import type { Tournament } from './App';
 
+type HudDensity = 'compact' | 'standard' | 'expanded';
+const HUD_DENSITIES: HudDensity[] = ['compact', 'standard', 'expanded'];
+
 /**
  * DisplayPreview • v4.2
  * - Prioriza torneos corriendo (max 3).
@@ -50,6 +53,10 @@ export const DisplayPreview: React.FC<{
   const LS_FIT = 'sigad_preview_fit_v1';
   const [fitMap, setFitMap] = useState<Record<string, 'contain'|'width'|'height'>>(() => readObj(LS_FIT));
 
+  // HUD density
+  const LS_DENSITY = 'sigad_preview_density_v1';
+  const [densityMap, setDensityMap] = useState<Record<string, HudDensity>>(() => readObj(LS_DENSITY));
+
   // Overlay heights
   const LS_H_EXP = 'sigad_preview_h_exp_v1';
   const [expHeights, setExpHeights] = useState<Record<string, number>>(() => readObj(LS_H_EXP));
@@ -59,6 +66,7 @@ export const DisplayPreview: React.FC<{
   useEffect(() => { try { localStorage.setItem(LS_H, JSON.stringify(heights)); } catch {} }, [heights]);
   useEffect(() => { try { localStorage.setItem(LS_FX, JSON.stringify(fxMap)); } catch {} }, [fxMap]);
   useEffect(() => { try { localStorage.setItem(LS_FIT, JSON.stringify(fitMap)); } catch {} }, [fitMap]);
+  useEffect(() => { try { localStorage.setItem(LS_DENSITY, JSON.stringify(densityMap)); } catch {} }, [densityMap]);
   useEffect(() => { try { localStorage.setItem(LS_H_EXP, JSON.stringify(expHeights)); } catch {} }, [expHeights]);
 
   const getH     = (id: string) => clampSidebarH(heights[id] ?? DEFAULT_H);
@@ -71,6 +79,24 @@ export const DisplayPreview: React.FC<{
     const next = cur === 'contain' ? 'width' : cur === 'width' ? 'height' : 'contain';
     return { ...prev, [id]: next };
   });
+  const pushDensity = (id: string, mode: HudDensity) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '*';
+    const targetOrigin = origin || '*';
+    const frame = document.getElementById(`prev-${id}`) as HTMLIFrameElement | null;
+    frame?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
+    const expanded = document.getElementById(`prev-exp-${id}`) as HTMLIFrameElement | null;
+    expanded?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
+  };
+  const getDensity = (id: string): HudDensity => (densityMap[id] as HudDensity) ?? 'standard';
+  const setDensity = (id: string, mode: HudDensity) => setDensityMap(prev => ({ ...prev, [id]: mode }));
+  const cycleDensityMode = (id: string) => {
+    const current = getDensity(id);
+    const idx = HUD_DENSITIES.indexOf(current);
+    const next = HUD_DENSITIES[(idx + 1) % HUD_DENSITIES.length];
+    setDensity(id, next);
+    pushDensity(id, next);
+  };
+  const densityLabel = (mode: HudDensity) => (mode === 'compact' ? 'compacto' : mode === 'expanded' ? 'amplio' : 'equilibrado');
   const getExpH  = (id: string) => clampOverlayH(expHeights[id] ?? DEFAULT_H_EXP);
   const setExpH  = (id: string, v: number) => setExpHeights(prev => ({ ...prev, [id]: clampOverlayH(v) }));
 
@@ -191,7 +217,10 @@ export const DisplayPreview: React.FC<{
 
   /* ---------- Carga/estado de iframes ---------- */
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
-  const markLoaded = (id: string) => setLoaded(prev => ({ ...prev, [id]: true }));
+  const markLoaded = (id: string) => {
+    setLoaded(prev => ({ ...prev, [id]: true }));
+    pushDensity(id, getDensity(id));
+  };
   const reloadFrame = (id: string) => {
     const iframe = document.getElementById(id) as HTMLIFrameElement | null;
     if (!iframe) return;
@@ -260,8 +289,9 @@ export const DisplayPreview: React.FC<{
         {sorted.map(t => {
           const hNow = getH(t.id);
           const fit = getFit(t.id);
+          const density = getDensity(t.id);
           const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
-          const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
+          const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}&hud=${density}`;
 
           // Medición de ancho disponible:
           const availW = Math.max(240, (boxW[t.id] ?? 0) || 0);
@@ -299,6 +329,14 @@ export const DisplayPreview: React.FC<{
                         <span className="d-none d-md-inline ms-1">
                           {fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}
                         </span>
+                      </button>
+                      <button
+                        className="btn btn-outline-light"
+                        onClick={() => cycleDensityMode(t.id)}
+                        title={`Densidad HUD: ${densityLabel(density)}`}
+                      >
+                        {density === 'compact' ? '▣' : density === 'expanded' ? '▢' : '▤'}
+                        <span className="d-none d-md-inline ms-1">HUD</span>
                       </button>
                       <button className="btn btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">
                         ⤢ <span className="d-none d-md-inline ms-1">Expandir</span>
@@ -495,6 +533,7 @@ export const DisplayPreview: React.FC<{
                     >
                       <span>{scalePct}%</span>
                       <span style={{ opacity: 0.85 }}>{fit}</span>
+                      <span style={{ opacity: 0.7 }}>{densityLabel(density)}</span>
                     </div>
                   </div>
                 </div>
@@ -530,8 +569,9 @@ export const DisplayPreview: React.FC<{
         const t = tournaments.find(x => x.id === expandedId);
         if (!t) return null;
         const fit = getFit(t.id);
+        const density = getDensity(t.id);
         const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
-        const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
+        const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}&hud=${density}`;
 
         // Dimensiones disponibles
         const outerPad = 24;
@@ -600,10 +640,10 @@ export const DisplayPreview: React.FC<{
                 </span>
 
                 <div className="d-flex align-items-center flex-wrap gap-2">
-                  <span className="small text-secondary me-1">{scalePct}%</span>
+                  <span className="small text-secondary me-1">{scalePct}% · {densityLabel(density)}</span>
 
                   {/* Grupo 1 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste">
+                  <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste HUD">
                     <button
                       className="btn btn-outline-light"
                       onClick={() => cycleFit(t.id)}
@@ -611,6 +651,14 @@ export const DisplayPreview: React.FC<{
                     >
                       {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
                       <span className="d-none d-md-inline ms-1">{fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}</span>
+                    </button>
+                    <button
+                      className="btn btn-outline-light"
+                      onClick={() => cycleDensityMode(t.id)}
+                      title={`Densidad HUD: ${densityLabel(density)}`}
+                    >
+                      {density === 'compact' ? '▣' : density === 'expanded' ? '▢' : '▤'}
+                      <span className="d-none d-md-inline ms-1">HUD</span>
                     </button>
                   </div>
 
@@ -723,6 +771,7 @@ export const DisplayPreview: React.FC<{
                     >
                       <span>{scalePct}%</span>
                       <span style={{ opacity: .85 }}>{fit}</span>
+                      <span style={{ opacity: .7 }}>{densityLabel(density)}</span>
                     </div>
                   </div>
                 </div>
