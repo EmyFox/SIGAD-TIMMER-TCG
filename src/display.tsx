@@ -545,6 +545,7 @@ const RoundTrack = React.memo(
 
   const classes = [
     "round-track",
+    "round-track--hud",
     isLight ? "round-track--light" : "",
     accent === "break" ? "round-track--break" : "",
     density === "compact" ? "round-track--density-compact" : "",
@@ -1245,10 +1246,10 @@ const Display: React.FC = () => {
     .join(" ");
   const stackGapClass =
     density === "compact"
-      ? "flex flex-col gap-[0.65rem]"
+      ? "flex flex-col gap-[0.58rem]"
       : density === "expanded"
-      ? "flex flex-col gap-[1.3rem]"
-      : "flex flex-col gap-[0.95rem]";
+      ? "flex flex-col gap-[1.15rem]"
+      : "flex flex-col gap-[0.82rem]";
   const hasTrack = !!trackData;
   const hasSchedule = schedule.length > 0;
   const infoDeckClass = [
@@ -1494,12 +1495,8 @@ const Display: React.FC = () => {
                     <div className="hud-info-grid__cell hud-info-grid__cell--schedule">
                       <div
                         className={[
-                          pick(
-                            !!isLight,
-                            "rounded-2xl border border-zinc-200 bg-white/75 p-5 shadow-sm",
-                            "rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"
-                          ),
                           "schedule-card",
+                          "schedule-card--hud",
                           density === "compact" ? "schedule-card--compact" : "",
                           density === "expanded" ? "schedule-card--expanded" : "",
                           schedule.length <= 2 ? "schedule-card--tight" : "",

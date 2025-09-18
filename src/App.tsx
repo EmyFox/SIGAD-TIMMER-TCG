@@ -980,16 +980,17 @@ export const MasterPanel: React.FC = () => {
           aria-hidden
           style={{
             position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
-            background: `radial-gradient(circle at 30% 20%, rgba(99,102,241,.18), transparent 60%),
-                      radial-gradient(circle at 70% 80%, rgba(236,72,153,.10), transparent 65%)`,
-            opacity: .18,
-            filter: 'saturate(.9) contrast(1.05) brightness(.9)',
-            mixBlendMode: 'luminosity'
+            background: `radial-gradient(circle at 28% 22%, rgba(99,102,241,.24), transparent 62%),
+                      radial-gradient(circle at 72% 78%, rgba(236,72,153,.16), transparent 68%)`,
+            opacity: .24,
+            filter: 'saturate(.95) contrast(1.08) brightness(.92)',
+            mixBlendMode: 'soft-light'
           }}
         >
           <div style={{
             position:'absolute', inset:0, backgroundImage: 'var(--sigad-logo-url)',
-            backgroundRepeat:'no-repeat', backgroundPosition:'center 32%', backgroundSize:'min(56vw, 760px) auto'
+            backgroundRepeat:'no-repeat', backgroundPosition:'center', backgroundSize:'clamp(420px, 60vw, 920px) auto',
+            filter:'blur(.6px) saturate(1.04) brightness(1.02)'
           }} />
         </div>
       )}
