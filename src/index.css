@@ -425,12 +425,17 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 @keyframes sweep { to { background-position: 200% 0; } }
 
 /* ===== Round track ===== */
-.round-track{ position:relative; border-radius:22px; padding:18px 22px 22px; border:1px solid color-mix(in srgb, var(--border-1), transparent 18%); background: linear-gradient(160deg, color-mix(in srgb, var(--surface-1), transparent 28%), color-mix(in srgb, var(--surface-2), transparent 8%)); backdrop-filter: blur(22px); box-shadow: 0 18px 36px rgba(15,23,42,.3); overflow:hidden; isolation:isolate; max-width:100%; transition: transform .6s var(--hud-ease), box-shadow .6s var(--hud-ease), opacity .6s var(--hud-ease); }
-.light .round-track{ background: linear-gradient(160deg, rgba(255,255,255,.92), rgba(244,249,255,.82)); border-color: rgba(15,23,42,.08); box-shadow: 0 16px 32px rgba(15,23,42,.12); }
-.round-track::before{ content:""; position:absolute; inset:-38% -18%; background: radial-gradient(70% 70% at 12% 12%, rgba(99,102,241,.32), transparent 68%); opacity:.58; }
-.round-track::after{ content:""; position:absolute; inset:-30% -18%; background: radial-gradient(68% 68% at 82% 18%, rgba(14,165,233,.22), transparent 70%); opacity:.45; }
-.round-track--break::before{ background: radial-gradient(circle at 0% 0%, rgba(250,204,21,.26), rgba(253,164,175,.16) 52%, transparent 74%); }
-.round-track--break::after{ background: radial-gradient(circle at 78% 20%, rgba(253,186,116,.2), transparent 70%); }
+.round-track{ position:relative; border-radius:22px; padding:18px 22px 22px; border:1px solid color-mix(in srgb, var(--border-1), transparent 10%); background: radial-gradient(140% 120% at 14% -18%, color-mix(in srgb, var(--accent-2), transparent 74%), transparent 70%), radial-gradient(120% 130% at 90% 0%, color-mix(in srgb, var(--accent-1), transparent 78%), transparent 72%), linear-gradient(162deg, color-mix(in srgb, var(--surface-1), transparent 18%), color-mix(in srgb, var(--surface-2), transparent 4%)); backdrop-filter: blur(26px); box-shadow: 0 22px 48px rgba(15,23,42,.32); overflow:hidden; isolation:isolate; max-width:100%; transition: transform .6s var(--hud-ease), box-shadow .6s var(--hud-ease), opacity .6s var(--hud-ease); }
+.light .round-track{ border-color: rgba(148,163,184,.22); background: radial-gradient(140% 120% at 14% -16%, rgba(167,139,250,.28), transparent 70%), radial-gradient(120% 130% at 88% 4%, rgba(59,130,246,.22), transparent 72%), linear-gradient(162deg, rgba(255,255,255,.94), rgba(244,249,255,.86)); box-shadow: 0 18px 36px rgba(15,23,42,.12); }
+.round-track::before,
+.round-track::after{ content:""; position:absolute; inset:0; pointer-events:none; border-radius:inherit; transition: opacity .6s var(--hud-ease); }
+.round-track::before{ background: radial-gradient(120% 140% at 22% 0%, rgba(255,255,255,.18), transparent 65%); opacity:.42; mix-blend-mode:screen; }
+.round-track::after{ background: radial-gradient(120% 120% at 80% 110%, rgba(56,189,248,.26), transparent 72%); opacity:.32; mix-blend-mode:screen; }
+.light .round-track::before{ opacity:.55; mix-blend-mode:soft-light; }
+.light .round-track::after{ opacity:.25; mix-blend-mode:multiply; }
+.round-track--break{ background: radial-gradient(140% 120% at 14% -16%, rgba(253,220,148,.32), transparent 70%), radial-gradient(120% 130% at 90% 6%, rgba(253,164,175,.28), transparent 74%), linear-gradient(162deg, color-mix(in srgb, var(--surface-1), transparent 14%), color-mix(in srgb, var(--surface-2), transparent 6%)); }
+.light .round-track--break{ background: radial-gradient(140% 120% at 14% -16%, rgba(253,213,141,.45), transparent 70%), radial-gradient(120% 130% at 90% 6%, rgba(248,196,150,.38), transparent 74%), linear-gradient(162deg, rgba(255,255,255,.94), rgba(253,250,243,.88)); }
+.round-track--break::after{ background: radial-gradient(120% 120% at 80% 110%, rgba(253,186,116,.38), transparent 72%); }
 .round-track__header{ position:relative; z-index:2; display:flex; align-items:flex-start; gap:14px; margin-bottom:12px; }
 .round-track__icon{ display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:14px; background: linear-gradient(135deg, rgba(59,130,246,.6), rgba(129,140,248,.6)); color:#fff; box-shadow: 0 12px 28px rgba(59,130,246,.28); }
 .round-track--break .round-track__icon{ background: linear-gradient(135deg, rgba(251,191,36,.7), rgba(248,113,113,.6)); box-shadow: 0 12px 28px rgba(251,191,36,.28); }
@@ -486,8 +491,8 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 
 /* ===== Schedule card ===== */
 .schedule-card{ position:relative; overflow:hidden; border-radius:1.5rem; isolation:isolate; max-width:100%; transition: transform .6s var(--hud-ease), box-shadow .6s var(--hud-ease), opacity .6s var(--hud-ease); }
-.schedule-card--hud{ padding:22px; border-radius:22px; border:1px solid color-mix(in srgb, var(--border-1), transparent 20%); background: linear-gradient(158deg, color-mix(in srgb, var(--surface-1), transparent 30%), color-mix(in srgb, var(--surface-2), transparent 10%)); box-shadow: 0 18px 34px rgba(15,23,42,.28); }
-.light .schedule-card--hud{ background: linear-gradient(158deg, rgba(255,255,255,.92), rgba(244,249,255,.82)); border-color: rgba(148,163,184,.22); box-shadow: 0 16px 28px rgba(15,23,42,.1); }
+.schedule-card--hud{ padding:22px; border-radius:22px; border:1px solid color-mix(in srgb, var(--border-1), transparent 12%); background: radial-gradient(150% 120% at 10% -18%, color-mix(in srgb, var(--accent-2), transparent 78%), transparent 72%), radial-gradient(130% 120% at 94% 6%, color-mix(in srgb, var(--accent-1), transparent 78%), transparent 74%), linear-gradient(158deg, color-mix(in srgb, var(--surface-1), transparent 16%), color-mix(in srgb, var(--surface-2), transparent 6%)); backdrop-filter: blur(26px); box-shadow: 0 20px 44px rgba(15,23,42,.32); }
+.light .schedule-card--hud{ background: radial-gradient(150% 120% at 10% -16%, rgba(167,139,250,.26), transparent 72%), radial-gradient(130% 120% at 94% 8%, rgba(59,130,246,.24), transparent 74%), linear-gradient(158deg, rgba(255,255,255,.94), rgba(245,248,255,.86)); border-color: rgba(148,163,184,.22); box-shadow: 0 18px 34px rgba(15,23,42,.12); }
 .hud-columns .schedule-card{ justify-self:stretch; }
 .hud-columns.hud-columns--compact .schedule-card{ max-width:min(100%,380px); }
 .hud-columns.hud-columns--expanded .schedule-card{ max-width:min(100%,460px); }
@@ -499,9 +504,10 @@ body { overscroll-behavior: none; background: #000; -webkit-font-smoothing: anti
 .light .simple-panel__details{ background:rgba(255,255,255,.86); border-color:rgba(148,163,184,.45); }
 .light .simple-panel__details[open]{ background:rgba(255,255,255,.95); }
 .light .simple-panel__details summary{ color:rgba(15,23,42,.7); }
-.schedule-card::before{ content:""; position:absolute; inset:-38% -20%; background: radial-gradient(72% 72% at 12% 12%, rgba(99,102,241,.3), transparent 70%); opacity:.55; }
-.schedule-card::after{ content:""; position:absolute; inset:-32% -18%; background: radial-gradient(70% 70% at 80% 22%, rgba(236,72,153,.2), transparent 72%); opacity:.45; }
-.light .schedule-card::before{ opacity:.38; }
+.schedule-card::before{ content:""; position:absolute; inset:-30% -16%; border-radius:inherit; pointer-events:none; background: radial-gradient(120% 120% at 18% 0%, rgba(129,140,248,.32), transparent 72%); opacity:.32; mix-blend-mode:screen; transition: opacity .6s var(--hud-ease); }
+.schedule-card::after{ content:""; position:absolute; inset:-34% -18%; border-radius:inherit; pointer-events:none; background: radial-gradient(120% 110% at 84% 6%, rgba(236,72,153,.26), transparent 74%); opacity:.26; mix-blend-mode:screen; transition: opacity .6s var(--hud-ease); }
+.light .schedule-card::before{ opacity:.26; mix-blend-mode:multiply; }
+.light .schedule-card::after{ opacity:.2; mix-blend-mode:multiply; }
 .schedule-card__header{ position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
 .schedule-card__subtitle{ font-size:.72rem; letter-spacing:.32em; text-transform:uppercase; color: var(--text-3); }
 .schedule-card__hint{ font-size:.7rem; color: var(--text-3); opacity:.75; }
