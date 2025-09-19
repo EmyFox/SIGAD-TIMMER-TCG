@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import ReactDOM from "react-dom/client";
 import dayjs from "dayjs";
+import "dayjs/locale/es";
 import {
   subscribeDisplay,
   subscribeAnnouncements,
@@ -10,74 +11,220 @@ import {
 } from "./displayChannel";
 import { BrandLogo } from "./BrandLogo";
 
+type HudDensity = "compact" | "standard" | "expanded";
+type HudScale = number;
+type ScheduleKind = "round" | "break" | "final";
+
+interface ScheduleItem {
+  label: string;
+  time: string;
+  kind: ScheduleKind;
+}
+
+const HUD_DENSITY_KEY = "sigad-hud-density";
+const HUD_SCALE_KEY = "sigad-hud-scale";
+
+const parseDensity = (value: string | null | undefined): HudDensity | null => {
+  return value === "compact" || value === "standard" || value === "expanded" ? value : null;
+};
+
+const parseScale = (value: string | null | undefined): HudScale | null => {
+  if (!value) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const rounded = Math.round(num);
+  if (rounded < 70 || rounded > 140) return null;
+  return rounded;
+};
+
+const clampScale = (value: HudScale): HudScale => {
+  const rounded = Math.round(value);
+  if (Number.isNaN(rounded)) return 100;
+  return Math.min(140, Math.max(70, rounded));
+};
+
+dayjs.locale("es");
+
 /* ==================== Iconos ==================== */
 const IconClock = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path stroke="currentColor" strokeWidth="1.5" d="M12 8v5l3 2" />
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-  </svg>
-);
-const IconBolt = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path
-      d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"
+    <circle
+      cx="12"
+      cy="12"
+      r="9"
       stroke="currentColor"
       strokeWidth="1.5"
-      fill="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.88}
+    />
+    <path
+      d="M12 6.75v5.3l3.2 1.9"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="2.25" fill="currentColor" opacity={0.16} />
+    <path
+      d="M12 3.5v1.4m0 14.2v1.4m8.5-8.5h-1.4m-14.2 0H3.5"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      opacity={0.45}
     />
   </svg>
 );
 const IconTarget = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    <circle
+      cx="12"
+      cy="12"
+      r="9"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.8}
+    />
+    <circle
+      cx="12"
+      cy="12"
+      r="4.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.9}
+    />
+    <path
+      d="M12 7.25v9.5M7.25 12h9.5"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      opacity={0.55}
+    />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" />
   </svg>
 );
 const IconCoffee = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
     <path
-      d="M3 8h13v5a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8Z"
+      d="M4.75 8.5h11.5v4.6A4.9 4.9 0 0 1 11.4 18h-1.3a4.9 4.9 0 0 1-4.9-4.9V8.5Z"
       stroke="currentColor"
       strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
-    <path d="M16 9h2.5a2.5 2.5 0 1 1 0 5H16" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M16.25 9h2.2a2.55 2.55 0 0 1 0 5.1H16"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
     <path
       d="M7 4s1 1 0 2m4-2s1 1 0 2m4-2s1 1 0 2"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
     />
+    <path d="M7 19.25h7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity={0.55} />
   </svg>
 );
 const IconPlay = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="m8 5 12 7-12 7V5Z" fill="currentColor" />
+    <path d="m9 6 9 6-9 6V6Z" fill="currentColor" />
+    <path
+      d="M12 3.75c4.55 0 8.25 3.7 8.25 8.25s-3.7 8.25-8.25 8.25S3.75 16.55 3.75 12 7.45 3.75 12 3.75Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.55}
+    />
   </svg>
 );
 const IconTrophy = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
     <path
-      d="M6 3h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6V3Z"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    />
-    <path d="M9 21h6M9 18h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path
-      d="M18 6h2a2 2 0 0 1-2 2M6 6H4a2 2 0 0 0 2 2"
+      d="M6.5 4h11v2.4a5.5 5.5 0 0 1-5.5 5.5h-0a5.5 5.5 0 0 1-5.5-5.5V4Z"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M9.25 20.25h5.5m-5.5-2.8h5.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <path
+      d="M17.5 6.4h2.15a2.35 2.35 0 0 1-2.35 2.35M6.5 6.4H4.35A2.35 2.35 0 0 0 6.7 8.75"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
 const IconLayers = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="M12 3 3 8l9 5 9-5-9-5Z" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M3 12l9 5 9-5M3 16l9 5 9-5" stroke="currentColor" strokeWidth="1.5" opacity=".6" />
+    <path
+      d="M12 3.6 4.2 8l7.8 4.4L19.8 8 12 3.6Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M4.2 12.1 12 16.5l7.8-4.4M4.2 16.2 12 20.6l7.8-4.4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.65}
+    />
   </svg>
 );
-
+const IconSparkles = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path
+      d="M12 3.5 13.4 7l3.6 1.2L13.4 9.4 12 13l-1.4-3.6L7 8.2 10.6 7 12 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M5.5 4.5 6.2 6.6 8.3 7.3 6.2 8 5.5 10.1 4.8 8 2.7 7.3 4.8 6.6 5.5 4.5Z" fill="currentColor" opacity=".38" />
+    <path d="m18.6 13.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" fill="currentColor" opacity=".38" />
+  </svg>
+);
+const IconBolt = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path
+      d="m12 3-6 10h5v8l7-11h-5l2.6-7H12Z"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+const IconFlag = (p: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
+    <path d="M5 3.25v17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path
+      d="M5 4.75h10.6l-1.5 3.4 1.5 3.4H5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 /* ==================== Helpers ==================== */
 const pad2 = (n: number) => n.toString().padStart(2, "0");
 const fmtClock = (tf: TimeFmt) => (tf === "12" ? "hh:mm A" : "HH:mm");
@@ -96,9 +243,44 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+const timerEquals = (a: DisplayTournament["timer"], b: DisplayTournament["timer"]) =>
+  a.target === b.target &&
+  a.remainingMs === b.remainingMs &&
+  a.running === b.running &&
+  a.label === b.label &&
+  a.mode === b.mode;
+
+function tournamentsEqual(prev: DisplayTournament[], next: DisplayTournament[]) {
+  if (prev === next) return true;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (!b) return false;
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.game !== b.game ||
+      a.roundsTotal !== b.roundsTotal ||
+      a.roundsCompleted !== b.roundsCompleted ||
+      a.roundMinutes !== b.roundMinutes ||
+      a.breakEnabled !== b.breakEnabled ||
+      a.breakMinutes !== b.breakMinutes ||
+      a.autoStartNext !== b.autoStartNext ||
+      (a.nextRoundMinutes ?? null) !== (b.nextRoundMinutes ?? null) ||
+      a.createdAt !== b.createdAt ||
+      a.theme !== b.theme ||
+      !timerEquals(a.timer, b.timer)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Itinerario (máx 3) — FIX incluido */
-function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
-  const items: { label: string; time: string }[] = [];
+function computeSchedule(t: DisplayTournament, tf: TimeFmt): ScheduleItem[] {
+  const items: ScheduleItem[] = [];
   let base = Date.now();
 
   const inSomething =
@@ -108,12 +290,20 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
 
   const remaining = inSomething ? Math.max(0, (t.timer.target ?? 0) - base) : 0;
   if (remaining > 0) {
+    const finishingIndex = inRound ? currentIndex : currentIndex + 1;
+    const finishingKind: ScheduleKind =
+      t.timer.mode === "break"
+        ? "break"
+        : finishingIndex >= t.roundsTotal
+        ? "final"
+        : "round";
     items.push({
       label:
         t.timer.mode === "break"
-          ? "Fin break"
+          ? "Fin del descanso"
           : `Fin ronda ${inRound ? currentIndex : currentIndex + 1}`,
       time: dayjs(base + remaining).format(fmtClock(tf)),
+      kind: finishingKind,
     });
     base += remaining;
   }
@@ -122,12 +312,13 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
   for (let i = 1; i <= left; i++) {
     if (t.breakEnabled && t.breakMinutes > 0) {
       base += t.breakMinutes * 60_000;
-      items.push({ label: "Break", time: dayjs(base).format(fmtClock(tf)) });
+      items.push({ label: "Descanso", time: dayjs(base).format(fmtClock(tf)), kind: "break" });
     }
     base += t.roundMinutes * 60_000;
     items.push({
       label: `Fin ronda ${currentIndex + i}`,
       time: dayjs(base).format(fmtClock(tf)),
+      kind: currentIndex + i >= t.roundsTotal ? "final" : "round",
     });
   }
   return items.slice(0, 3);
@@ -150,61 +341,103 @@ const Pill = ({ children, isLight }: PillProps) => (
   </span>
 );
 
-interface StatCardProps { label: string; children: React.ReactNode; isLight: boolean }
-const StatCard = ({ label, children, isLight }: StatCardProps) => (
-  <div
-    className={pick(
-      isLight,
-      "rounded-xl border border-zinc-200 bg-white/80 shadow-sm p-4 transition-colors hover:bg-white",
-      "rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-colors hover:bg-zinc-900/70"
-    )}
-  >
-    <div className={pick(isLight, "text-zinc-600 text-[13px]", "text-zinc-400 text-[13px]")}>{label}</div>
-    <div className={pick(isLight, "mt-1.5 font-semibold text-zinc-900", "mt-1.5 font-semibold text-zinc-100")}>{children}</div>
-  </div>
-);
+interface StatCardProps {
+  label: string;
+  children: React.ReactNode;
+  isLight: boolean;
+  density: HudDensity;
+}
+const StatCard = ({ label, children, isLight, density }: StatCardProps) => {
+  const baseClass = pick(
+    isLight,
+    "rounded-xl border border-zinc-200/80 bg-white/80 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur",
+    "rounded-xl border border-white/5 bg-zinc-900/55 shadow-[0_18px_38px_rgba(10,12,26,0.48)] backdrop-blur"
+  );
+  const paddingClass = density === "compact" ? "p-3" : density === "expanded" ? "p-5" : "p-4";
+  const labelClass = pick(
+    isLight,
+    `${density === "compact" ? "text-[12px]" : "text-[13px]"} text-zinc-600`,
+    `${density === "compact" ? "text-[12px]" : "text-[13px]"} text-zinc-400`
+  );
+  const valueMargin = density === "compact" ? "mt-1" : density === "expanded" ? "mt-2" : "mt-1.5";
+  const valueSize = density === "compact" ? "text-[15px]" : density === "expanded" ? "text-lg" : "text-base";
+  const valueClass = pick(
+    isLight,
+    `${valueMargin} font-semibold text-zinc-900 ${valueSize}`,
+    `${valueMargin} font-semibold text-zinc-100 ${valueSize}`
+  );
 
-const TimeBlock = ({
-  value,
-  label,
-  accent,
-  isLight,
-}: {
+  return (
+    <div className={`${baseClass} ${paddingClass}`}>
+      <div className={labelClass}>{label}</div>
+      <div className={valueClass}>{children}</div>
+    </div>
+  );
+};
+
+interface TimeBlockProps {
   value: string;
   label: string;
   accent: "indigo" | "amber";
   isLight: boolean;
-}) => (
-  <div className="group relative overflow-hidden rounded-2xl hud-corners time-ambient">
-    <div className={`neon-border ${accent === "amber" ? "neon-amber" : "neon-indigo"}`} />
-    <div
-      className={pick(
-        isLight,
-        "relative z-10 rounded-2xl bg-zinc-50 px-5 py-4 md:px-6 md:py-5",
-        "relative z-10 rounded-2xl bg-zinc-900/60 px-5 py-4 md:px-6 md:py-5"
-      )}
-    >
+  density: HudDensity;
+}
+
+const TimeBlock = React.memo(
+  ({ value, label, accent, isLight, density }: TimeBlockProps) => {
+    const paddingClass =
+      density === "compact"
+        ? "px-4 py-3 md:px-5 md:py-4"
+        : density === "expanded"
+        ? "px-7 py-6 md:px-8 md:py-7"
+      : "px-5 py-4 md:px-6 md:py-5";
+  const numberClass =
+    density === "compact"
+      ? "text-4xl md:text-5xl"
+      : density === "expanded"
+      ? "text-6xl md:text-8xl"
+      : "text-5xl md:text-7xl";
+  const labelMargin = density === "expanded" ? "mt-1.5" : density === "compact" ? "mt-1" : "mt-1.5";
+  const labelSize = density === "compact" ? "text-[11px]" : "text-xs";
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl hud-corners time-ambient">
+      <div className={`neon-border ${accent === "amber" ? "neon-amber" : "neon-indigo"}`} />
       <div
         className={pick(
           isLight,
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-900",
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-100"
-        )}
-        style={{ fontFeatureSettings: "'tnum' on", fontVariantNumeric: "tabular-nums" }}
-      >
-        {value}
-      </div>
-      <div
-        className={pick(
-          isLight,
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500",
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-400"
+          `relative z-10 rounded-2xl bg-zinc-50 ${paddingClass}`,
+          `relative z-10 rounded-2xl bg-zinc-900/60 ${paddingClass}`
         )}
       >
-        {label}
+        <div
+          className={pick(
+            isLight,
+            `tabular-nums font-black leading-none tracking-tight ${numberClass} animate-flipTick will-change-transform digit-glow text-zinc-900`,
+            `tabular-nums font-black leading-none tracking-tight ${numberClass} animate-flipTick will-change-transform digit-glow text-zinc-100`
+          )}
+          style={{ fontFeatureSettings: "'tnum' on", fontVariantNumeric: "tabular-nums" }}
+        >
+          {value}
+        </div>
+        <div
+          className={pick(
+            isLight,
+            `${labelMargin} ${labelSize} uppercase tracking-[0.24em] text-zinc-500`,
+            `${labelMargin} ${labelSize} uppercase tracking-[0.24em] text-zinc-400`
+          )}
+        >
+          {label}
+        </div>
       </div>
     </div>
-  </div>
+  },
+  (prev, next) =>
+    prev.value === next.value &&
+    prev.label === next.label &&
+    prev.accent === next.accent &&
+    prev.isLight === next.isLight &&
+    prev.density === next.density
 );
 
 const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = ({
@@ -229,6 +462,521 @@ const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = (
     </div>
   );
 };
+
+const BokehBackdrop = React.memo(({ isLight, disableFX }: { isLight: boolean; disableFX: boolean }) => {
+  const nodes = useMemo(() => Array.from({ length: 5 }, (_, i) => i + 1), []);
+  if (disableFX) return null;
+  return (
+    <div className={`hud-bokeh ${isLight ? "hud-bokeh--light" : ""}`} aria-hidden>
+      {nodes.map((idx) => (
+        <span key={idx} className={`hud-bokeh__item hud-bokeh__item--${idx}`} />
+      ))}
+    </div>
+  );
+});
+
+interface RoundTrackProps {
+  total: number;
+  current: number;
+  completed: number;
+  isLight: boolean;
+  accent: "round" | "break";
+  stateLabel: string;
+  density: HudDensity;
+  className?: string;
+  hideCaption?: boolean;
+}
+
+const RoundTrack = React.memo(
+  ({
+    total,
+    current,
+    completed,
+    isLight,
+    accent,
+    stateLabel,
+    density,
+    className,
+    hideCaption,
+  }: RoundTrackProps) => {
+    const safeTotal = Math.max(1, total);
+    const safeCurrent = Math.min(safeTotal, Math.max(1, current));
+    const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
+    const maxDots = density === "expanded" ? 14 : density === "compact" ? 8 : 12;
+  let start = Math.max(1, safeCurrent - Math.floor(maxDots / 2));
+  let end = Math.min(safeTotal, start + maxDots - 1);
+  start = Math.max(1, end - maxDots + 1);
+  end = Math.min(safeTotal, start + maxDots - 1);
+  const isCrowdedRange = safeTotal > maxDots;
+  const showLead = !isCrowdedRange && start > 1;
+  const showTail = !isCrowdedRange && end < safeTotal;
+  const nodes = [] as number[];
+  for (let idx = start; idx <= end; idx++) nodes.push(idx);
+
+  const baseProgress = safeTotal > 0 ? Math.max(0, Math.min(100, Math.round((safeCompleted / safeTotal) * 100))) : 0;
+  const barPct = safeTotal > 0
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(((safeCompleted + (accent === "break" ? 0 : 0.35)) / safeTotal) * 100)
+        )
+      )
+    : 0;
+
+  const accentIcon = accent === "break" ? (
+    <IconCoffee className="size-5" />
+  ) : (
+    <IconFlag className="size-5" />
+  );
+  const description = (() => {
+    if (stateLabel === "Terminado") return "El torneo llegó a la meta. Puedes preparar la siguiente fase.";
+    if (stateLabel === "Pausado") return "La ronda está en pausa temporal. Retoma cuando la sala esté lista.";
+    if (accent === "break") return "Momento de descanso antes de retomar las rondas.";
+    return "Mapa visual del avance acumulado de las rondas.";
+  })();
+
+  const subtitleText =
+    density === "compact"
+      ? accent === "break"
+        ? "Descanso"
+        : "Rondas"
+      : accent === "break"
+      ? "Momento de descanso"
+      : "Mapa de rondas";
+  const titleText =
+    density === "compact"
+      ? accent === "break"
+        ? "Descanso en curso"
+        : "Pulso del torneo"
+      : accent === "break"
+      ? "Descanso panorámico"
+      : "Avance general";
+  const metaText =
+    density === "compact" ? `R${safeCurrent}/${safeTotal}` : `Ronda ${safeCurrent} · ${safeCompleted}/${safeTotal}`;
+
+  const classes = [
+    "round-track",
+    "round-track--hud",
+    isLight ? "round-track--light" : "",
+    accent === "break" ? "round-track--break" : "",
+    density === "compact" ? "round-track--density-compact" : "",
+    density === "expanded" ? "round-track--density-expanded" : "",
+    safeTotal <= 8 ? "round-track--mini" : "",
+    isCrowdedRange ? "round-track--crowded" : "",
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const showCaption = !hideCaption && (density !== "compact" || isCrowdedRange);
+
+  return (
+    <div
+      className={classes}
+    >
+      <div className="round-track__header">
+        <span className="round-track__icon">{accentIcon}</span>
+        <div>
+          <span className="round-track__subtitle">{subtitleText}</span>
+          <div className="round-track__title">{titleText}</div>
+        </div>
+        <span className="round-track__meta">{metaText}</span>
+      </div>
+      <div className="round-track__bar" aria-hidden>
+        <span className="round-track__bar-fill" style={{ width: `${accent === "break" ? baseProgress : Math.max(baseProgress, barPct)}%` }} />
+      </div>
+      <div className="round-track__rail" role="list" aria-label="Avance de rondas">
+        {showLead && (
+          <span className="round-track__ellipsis" aria-hidden>
+            …
+          </span>
+        )}
+        {nodes.map((idx) => {
+          const status = idx <= safeCompleted ? "done" : idx === safeCurrent && safeCompleted !== safeTotal ? "now" : "todo";
+          const label =
+            status === "done" ? "Finalizada" : status === "now" ? "En curso" : accent === "break" ? "Pendiente" : "Pendiente";
+          return (
+            <span
+              key={idx}
+              className={["round-track__node", `round-track__node--${status}`].join(" ")}
+              role="listitem"
+              aria-label={`Ronda ${idx}: ${label}`}
+            >
+              <span className="round-track__label">{idx}</span>
+              <span
+                className={[
+                  "round-track__spark",
+                  status === "now" ? "round-track__spark--active" : "",
+                  status === "done" ? "round-track__spark--trail" : "",
+                ].join(" ")}
+                aria-hidden
+              />
+            </span>
+          );
+        })}
+        {showTail && (
+          <span className="round-track__ellipsis" aria-hidden>
+            …
+          </span>
+        )}
+      </div>
+      {showCaption && <p className="round-track__caption">{description}</p>}
+    </div>
+  );
+  },
+  (prev, next) =>
+    prev.total === next.total &&
+    prev.current === next.current &&
+    prev.completed === next.completed &&
+    prev.isLight === next.isLight &&
+    prev.accent === next.accent &&
+    prev.stateLabel === next.stateLabel &&
+    prev.density === next.density &&
+    prev.className === next.className &&
+    prev.hideCaption === next.hideCaption
+);
+
+interface RoundSummaryPanelProps {
+  track: { total: number; current: number; completed: number } | null;
+  schedule: ScheduleItem[];
+  isLight: boolean;
+  density: HudDensity;
+  accent: "round" | "break";
+  stateLabel: string;
+}
+
+const RoundSummaryPanel = React.memo(
+  ({ track, schedule, isLight, density, accent, stateLabel }: RoundSummaryPanelProps) => {
+    const [primary, ...rest] = schedule;
+
+    const classes = [
+      "round-summary-panel",
+      `round-summary-panel--${density}`,
+      isLight ? "round-summary-panel--light" : "",
+      accent === "break" ? "round-summary-panel--break" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const metaText = (() => {
+      if (!track) return stateLabel === "Sin iniciar" ? "Aún no hay rondas activas" : "Sin rondas activas";
+      return `Ronda ${track.current} · ${track.completed}/${track.total} completadas`;
+    })();
+
+    const kindIcon = (kind: ScheduleKind, size = "size-4") => {
+      if (kind === "break") return <IconCoffee className={size} />;
+      if (kind === "final") return <IconTrophy className={size} />;
+      return <IconFlag className={size} />;
+    };
+
+    return (
+      <section className={classes} aria-label="Resumen de rondas y próximos hitos">
+        <header className="round-summary-panel__header">
+          <div>
+            <span className="round-summary-panel__eyebrow">Rondas y hitos</span>
+            <h3 className="round-summary-panel__title">
+              {accent === "break" ? "Descanso en curso" : "Ruta del torneo"}
+            </h3>
+          </div>
+          <span className="round-summary-panel__meta">{metaText}</span>
+        </header>
+
+        {primary && (
+          <div className="round-summary-panel__highlight">
+            <span
+              className={["round-summary-panel__badge", `round-summary-panel__badge--${primary.kind}`]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden
+            >
+              {kindIcon(primary.kind, "size-5")}
+            </span>
+            <div className="round-summary-panel__highlight-body">
+              <span className="round-summary-panel__highlight-label">Próximo hito</span>
+              <span className="round-summary-panel__highlight-title">{primary.label}</span>
+              <time className="round-summary-panel__highlight-time">{primary.time}</time>
+            </div>
+          </div>
+        )}
+
+        <div className="round-summary-panel__content">
+          {track && (
+            <div className="round-summary-panel__track">
+              <RoundTrack
+                total={track.total}
+                completed={track.completed}
+                current={track.current}
+                isLight={isLight}
+                accent={accent}
+                stateLabel={stateLabel}
+                density={density}
+                className="round-track--panel"
+                hideCaption
+              />
+            </div>
+          )}
+          <div className="round-summary-panel__schedule">
+            {rest.length > 0 ? (
+              <>
+                <span className="round-summary-panel__list-label">Después</span>
+                <ul className="round-summary-panel__list">
+                  {rest.map((item, idx) => (
+                    <li
+                      key={`${item.label}-${idx}`}
+                      className={["round-summary-panel__item", `round-summary-panel__item--${item.kind}`]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className="round-summary-panel__item-icon" aria-hidden>
+                        {kindIcon(item.kind)}
+                      </span>
+                      <div className="round-summary-panel__item-body">
+                        <span className="round-summary-panel__item-label">{item.label}</span>
+                        <time className="round-summary-panel__item-time">{item.time}</time>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="round-summary-panel__empty">
+                {primary
+                  ? "Se mostrará el siguiente bloque cuando concluya este hito."
+                  : "No hay hitos programados para las próximas rondas."}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  },
+  (prev, next) => {
+    const trackEqual =
+      (prev.track === null && next.track === null) ||
+      (prev.track !== null &&
+        next.track !== null &&
+        prev.track.total === next.track.total &&
+        prev.track.current === next.track.current &&
+        prev.track.completed === next.track.completed);
+
+    const scheduleEqual =
+      prev.schedule.length === next.schedule.length &&
+      prev.schedule.every((item, idx) => {
+        const other = next.schedule[idx];
+        return !!other && item.label === other.label && item.time === other.time && item.kind === other.kind;
+      });
+
+    return (
+      trackEqual &&
+      scheduleEqual &&
+      prev.isLight === next.isLight &&
+      prev.density === next.density &&
+      prev.accent === next.accent &&
+      prev.stateLabel === next.stateLabel
+    );
+  }
+);
+
+interface ProgressPanelProps {
+  isLight: boolean;
+  accent: "indigo" | "amber";
+  displayPct: number;
+  transitionClass: string;
+  stateLabel: string;
+  nextEvent: ScheduleItem | null;
+  remaining: number;
+  mode: DisplayTournament["timer"]["mode"] | null;
+  currentRound: number | null;
+  roundMinutes: number;
+  breakMinutes: number;
+  breakEnabled: boolean;
+  density: HudDensity;
+  fxDisabled: boolean;
+}
+
+const ProgressPanel = React.memo(
+  ({
+    isLight,
+    accent,
+    displayPct,
+    transitionClass,
+    stateLabel,
+    nextEvent,
+    remaining,
+    mode,
+    currentRound,
+    roundMinutes,
+    breakMinutes,
+    breakEnabled,
+    density,
+    fxDisabled,
+  }: ProgressPanelProps) => {
+    const palette = useMemo(() => {
+      if (accent === "amber") {
+        return { start: "#facc15", mid: "#fb923c", end: "#f43f5e" };
+      }
+      if (isLight) {
+      return { start: "#38bdf8", mid: "#6366f1", end: "#a855f7" };
+    }
+    return { start: "#22d3ee", mid: "#6366f1", end: "#c084fc" };
+  }, [accent, isLight]);
+
+  const { h, m, s } = formatSplit(remaining);
+  const pct = Math.round(displayPct);
+  const isBreak = mode === "break";
+  const icon = isBreak ? <IconCoffee className="size-5" /> : <IconPlay className="size-5" />;
+  const subtitle = isBreak ? "Momento de descanso" : "Ritmo del torneo";
+  const title = (() => {
+    if (!mode) return "Temporizador listo";
+    if (isBreak) {
+      if (!breakEnabled) return "Descanso libre";
+      return breakMinutes > 0 ? `Descanso de ${breakMinutes} min` : "Descanso en progreso";
+    }
+    if (mode === "round") {
+      if (stateLabel === "Terminado") return "Ronda finalizada";
+      return currentRound ? `Ronda ${currentRound} en curso` : "Ronda en curso";
+    }
+    return "Temporizador activo";
+  })();
+
+  const pacePrimary = isBreak
+    ? breakEnabled && breakMinutes > 0
+      ? `${breakMinutes} min`
+      : "Flexible"
+    : roundMinutes > 0
+    ? `${roundMinutes} min`
+    : "Flexible";
+  const paceSecondary = isBreak ? "duración del descanso" : "duración de la ronda";
+  const nextPrimary = nextEvent ? nextEvent.label : stateLabel;
+  const nextSecondary = nextEvent ? nextEvent.time : "seguimiento en vivo";
+  const nextIcon = nextEvent
+    ? nextEvent.kind === "break"
+      ? <IconCoffee className="size-4" />
+      : nextEvent.kind === "final"
+      ? <IconTrophy className="size-4" />
+      : <IconFlag className="size-4" />
+    : <IconTarget className="size-4" />;
+
+  const accentStyle = useMemo(
+    () =>
+      ({
+        ["--accent-start" as any]: palette.start,
+        ["--accent-mid" as any]: palette.mid,
+        ["--accent-end" as any]: palette.end,
+        ["--progress" as any]: displayPct,
+        ["--progress-ratio" as any]: Math.max(0, Math.min(1, displayPct / 100)),
+      }) as React.CSSProperties,
+    [palette.end, palette.mid, palette.start, displayPct]
+  );
+
+  const freezeMotion = transitionClass === "no-transition" || fxDisabled;
+  const fillMotionClass = freezeMotion ? "no-transition" : "";
+  const showBeamFX = !fxDisabled;
+
+  const densityClass =
+    density === "compact"
+      ? "progress-panel--compact"
+      : density === "expanded"
+      ? "progress-panel--expanded"
+      : "";
+
+  return (
+    <div
+      className={["progress-panel", isLight ? "progress-panel--light" : "", densityClass].filter(Boolean).join(" ")}
+      style={accentStyle}
+    >
+      <span className="progress-panel__halo" aria-hidden />
+      <div className="progress-panel__header">
+        <span className="progress-panel__icon">{icon}</span>
+        <div>
+          <span className="progress-panel__subtitle">{subtitle}</span>
+          <div className="progress-panel__title">{title}</div>
+        </div>
+        <span className="progress-panel__chip">
+          <span className="progress-panel__chipIcon" aria-hidden>
+            <IconSparkles className="size-4" />
+          </span>
+          <span className="progress-panel__chipMeta">
+            <span className="progress-panel__chipValue">
+              {pct}
+              <sup>%</sup>
+            </span>
+            <span className="progress-panel__chipLabel">{stateLabel}</span>
+          </span>
+        </span>
+      </div>
+
+      <div className="progress-panel__meter">
+        <div className={["progress-beam", freezeMotion ? "progress-beam--static" : ""].join(" ")}>
+          <div className={["progress-beam__fill", fillMotionClass].join(" ")} />
+          {showBeamFX && (
+            <>
+              <span className={["progress-beam__glow", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+              <span className={["progress-beam__spark", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+              <span className={["progress-beam__shine", freezeMotion ? "no-transition" : ""].join(" ")} aria-hidden />
+            </>
+          )}
+        </div>
+        <div className="progress-panel__scale" aria-hidden>
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <span key={idx} className="progress-panel__tick" style={{ left: `${idx * 25}%` }} />
+          ))}
+        </div>
+      </div>
+
+      <div className="progress-panel__legend">
+        <div className="progress-panel__fact">
+          <span className="progress-panel__factIcon" aria-hidden>
+            <IconClock className="size-4" />
+          </span>
+          <span>
+            <strong>
+              {h}:{m}:{s}
+            </strong>
+            <small>tiempo restante</small>
+          </span>
+        </div>
+        <div className="progress-panel__fact">
+          <span className="progress-panel__factIcon" aria-hidden>
+            <IconBolt className="size-4" />
+          </span>
+          <span>
+            <strong>{pacePrimary}</strong>
+            <small>{paceSecondary}</small>
+          </span>
+        </div>
+        <div className="progress-panel__fact progress-panel__fact--wide">
+          <span className="progress-panel__factIcon" aria-hidden>
+            {nextIcon}
+          </span>
+          <span>
+            <strong>{nextPrimary}</strong>
+            <small>{nextSecondary}</small>
+          </span>
+        </div>
+      </div>
+    </div>
+  },
+  (prev, next) =>
+    prev.isLight === next.isLight &&
+    prev.accent === next.accent &&
+    prev.displayPct === next.displayPct &&
+    prev.transitionClass === next.transitionClass &&
+    prev.stateLabel === next.stateLabel &&
+    prev.remaining === next.remaining &&
+    prev.mode === next.mode &&
+    prev.currentRound === next.currentRound &&
+    prev.roundMinutes === next.roundMinutes &&
+    prev.breakMinutes === next.breakMinutes &&
+    prev.breakEnabled === next.breakEnabled &&
+    prev.density === next.density &&
+    prev.fxDisabled === next.fxDisabled &&
+    ((prev.nextEvent === next.nextEvent && prev.nextEvent !== null) ||
+      (prev.nextEvent?.label === next.nextEvent?.label &&
+        prev.nextEvent?.time === next.nextEvent?.time &&
+        prev.nextEvent?.kind === next.nextEvent?.kind))
+);
 
 /* ==================== Super Header (solo visual) ==================== */
 const SuperHeader: React.FC<{
@@ -377,8 +1125,60 @@ const Display: React.FC = () => {
   const [connected, setConnected] = useState(false); // reservado por si muestras estado de conexión
   const [page, setPage] = useState(0);
 
+  const [density, setDensity] = useState<HudDensity>(() => {
+    const param = parseDensity(getParam("hud"));
+    if (param) return param;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = parseDensity(window.localStorage.getItem(HUD_DENSITY_KEY));
+        if (stored) return stored;
+      } catch {}
+    }
+    return "standard";
+  });
+
+  const [hudScale, setHudScale] = useState<HudScale>(() => {
+    const param = parseScale(getParam("scale"));
+    if (param) return param;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = parseScale(window.localStorage.getItem(HUD_SCALE_KEY));
+        if (stored) return stored;
+      } catch {}
+    }
+    return 100;
+  });
+
   const fixedId = useRef<string | null>(getParam("id"));
-  const disableFX = getParam("nofx") === "1";
+  const disableFxParam = getParam("nofx") === "1";
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const listener = (ev: MediaQueryListEvent) => setPrefersReducedMotion(ev.matches);
+      setPrefersReducedMotion(mq.matches);
+      if (typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", listener);
+        return () => mq.removeEventListener("change", listener);
+      }
+      const legacy = mq as MediaQueryList & { addListener?: (cb: (ev: MediaQueryListEvent) => void) => void; removeListener?: (cb: (ev: MediaQueryListEvent) => void) => void };
+      if (typeof legacy.addListener === "function") {
+        legacy.addListener(listener);
+        return () => legacy.removeListener?.(listener);
+      }
+    } catch {
+      return;
+    }
+  }, []);
+  const disableFX = disableFxParam || prefersReducedMotion;
 
   const [now, setNow] = useState<number>(Date.now());
   useEffect(() => {
@@ -387,10 +1187,57 @@ const Display: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(HUD_DENSITY_KEY, density);
+    } catch {}
+  }, [density]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HUD_SCALE_KEY, String(hudScale));
+    } catch {}
+  }, [hudScale]);
+
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.origin && ev.origin !== window.location.origin) return;
+      const data = ev.data as { type?: string; value?: unknown } | null;
+      if (data?.type === "HUD_DENSITY") {
+        const raw = typeof data.value === "string" ? data.value : null;
+        const next = parseDensity(raw);
+        if (next) setDensity(next);
+      } else if (data?.type === "HUD_SCALE") {
+        const raw = typeof data.value === "number" ? data.value : Number(data.value);
+        const next = parseScale(Number.isFinite(raw) ? String(raw) : null);
+        if (next) setHudScale(clampScale(next));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (ev: StorageEvent) => {
+      if (!ev.key) return;
+      if (ev.storageArea !== window.localStorage) return;
+      if (ev.key === HUD_DENSITY_KEY) {
+        const next = parseDensity(ev.newValue);
+        if (next) setDensity(next);
+      } else if (ev.key === HUD_SCALE_KEY) {
+        const next = parseScale(ev.newValue);
+        if (next) setHudScale(clampScale(next));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
     const unsub = subscribeDisplay((s) => {
-      setConnected(true);
-      setTimeFmt(s.timeFmt);
-      setTournaments(s.tournaments || []);
+      setConnected((prev) => (prev ? prev : true));
+      setTimeFmt((prev) => (prev === s.timeFmt ? prev : s.timeFmt));
+      const incoming = s.tournaments || [];
+      setTournaments((prev) => (tournamentsEqual(prev, incoming) ? prev : incoming));
     });
     return unsub;
   }, []);
@@ -408,8 +1255,8 @@ const Display: React.FC = () => {
     return Math.max(0, remainingMs || 0);
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
-  const schedule = active ? computeSchedule(active, timeFmt) : [];
-
+  const schedule: ScheduleItem[] = active ? computeSchedule(active, timeFmt) : [];
+  const nextEvent = schedule[0] ?? null;
   const progressPct = useMemo(() => {
     if (!active) return 0;
     const total =
@@ -427,19 +1274,24 @@ const Display: React.FC = () => {
   useEffect(() => {
     if (cycleKey !== lastKeyRef.current) {
       lastKeyRef.current = cycleKey;
-      setDisplayPct(0);
-      requestAnimationFrame(() => setDisplayPct(progressPct));
+      if (disableFX) {
+        setDisplayPct(progressPct);
+      } else {
+        setDisplayPct(0);
+        requestAnimationFrame(() => setDisplayPct(progressPct));
+      }
     } else {
-      setDisplayPct((prev) => Math.max(prev, progressPct));
+      setDisplayPct((prev) => (disableFX ? progressPct : Math.max(prev, progressPct)));
     }
-  }, [cycleKey, progressPct]);
+  }, [cycleKey, progressPct, disableFX]);
 
   const prevShownRef = useRef(0);
   const transitionClass = useMemo(() => {
+    if (disableFX) return "no-transition";
     const prev = prevShownRef.current;
     const increasing = displayPct >= prev;
     return increasing || displayPct === 0 ? "transition-width" : "no-transition";
-  }, [displayPct]);
+  }, [displayPct, disableFX]);
   useEffect(() => {
     prevShownRef.current = displayPct;
   }, [displayPct]);
@@ -450,7 +1302,23 @@ const Display: React.FC = () => {
     return expired ? "Terminado" : active.timer.running ? "En curso" : active.timer.target ? "Pausado" : "Sin iniciar";
   }, [active, remaining]);
 
+  const trackData = useMemo(() => {
+    if (!active) return null;
+    const total = Math.max(1, active.roundsTotal || 1);
+    const completed = Math.min(active.roundsCompleted, total);
+    const running = active.timer.target !== null && (active.timer.running || active.timer.remainingMs > 0);
+    const inRound = running && active.timer.mode === "round";
+    const current =
+      stateLabel === "Terminado"
+        ? total
+        : inRound
+        ? Math.min(total, active.roundsCompleted + 1)
+        : Math.min(total, Math.max(1, completed || 1));
+    return { total, completed, current };
+  }, [active, stateLabel]);
+
   const accent: "indigo" | "amber" = active?.timer.mode === "break" ? "amber" : "indigo";
+  const trackAccent: "break" | "round" = active?.timer.mode === "break" ? "break" : "round";
   const isLight = active?.theme === "light";
 
   const pages = useMemo(() => chunk(tournaments, 3), [tournaments]);
@@ -464,14 +1332,92 @@ const Display: React.FC = () => {
     return () => clearInterval(id);
   }, [pages.length]);
 
+  const shellClass = [
+    pick(
+      isLight ?? false,
+      "min-h-screen w-full relative overflow-hidden light text-zinc-900 bg-gradient-to-b from-white via-zinc-50 to-zinc-100",
+      "min-h-screen w-full relative overflow-hidden text-zinc-100 bg-gradient-to-b from-slate-950 via-neutral-950 to-black"
+    ),
+    `hud-density-${density}`,
+    "display-shell",
+  ].join(" ");
+
+  const frameDensityClass =
+    density === "compact"
+      ? "hud-frame--compact"
+      : density === "expanded"
+      ? "hud-frame--expanded"
+      : "";
+
+  const frameScaleStyle = useMemo(() => {
+    const zoom = clampScale(hudScale) / 100;
+    const zoomExtra = Math.max(0, zoom - 1);
+    return {
+      ["--hud-zoom" as any]: zoom.toString(),
+      ["--hud-zoom-extra" as any]: zoomExtra.toString(),
+      transform: `scale(${zoom})`,
+      transformOrigin: "top center",
+    } as React.CSSProperties;
+  }, [hudScale]);
+
+  const headingClass = pick(
+    !!isLight,
+    `${
+      density === "compact"
+        ? "mb-4 text-[1.7rem] md:text-[2.45rem]"
+        : density === "expanded"
+        ? "mb-6 text-[2.5rem] md:text-[3.35rem]"
+        : "mb-5 text-2xl md:text-4xl"
+    } font-extrabold tracking-tight text-balance text-zinc-900`,
+    `${
+      density === "compact"
+        ? "mb-4 text-[1.7rem] md:text-[2.45rem]"
+        : density === "expanded"
+        ? "mb-6 text-[2.5rem] md:text-[3.35rem]"
+        : "mb-5 text-2xl md:text-4xl"
+    } font-extrabold tracking-tight text-balance`
+  );
+
+  const timeGridClass = `grid grid-cols-3 ${
+    density === "compact"
+      ? "gap-[0.55rem]"
+      : density === "expanded"
+      ? "gap-[1.1rem]"
+      : "gap-[0.85rem]"
+  }`;
+  const statsGridClass = [
+    "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
+    density === "compact"
+      ? "gap-[0.55rem] text-[13px]"
+      : density === "expanded"
+      ? "gap-[1.1rem] text-[15px]"
+      : "gap-[0.85rem] text-[14px]",
+  ].join(" ");
+  const columnsClass = [
+    "hud-columns",
+    density === "compact" ? "hud-columns--compact" : "",
+    density === "expanded" ? "hud-columns--expanded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const stackGapClass =
+    density === "compact"
+      ? "flex flex-col gap-[0.58rem]"
+      : density === "expanded"
+      ? "flex flex-col gap-[1.15rem]"
+      : "flex flex-col gap-[0.82rem]";
+  const hasTrack = !!trackData;
+  const hasSchedule = schedule.length > 0;
+  const sideStackClass = [
+    "hud-side-stack",
+    density === "compact" ? "hud-side-stack--compact" : "",
+    density === "expanded" ? "hud-side-stack--expanded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div
-      className={pick(
-        isLight ?? false,
-        "min-h-screen w-full relative overflow-hidden light text-zinc-900 bg-gradient-to-b from-white via-zinc-50 to-zinc-100",
-        "min-h-screen w-full relative overflow-hidden text-zinc-100 bg-gradient-to-b from-slate-950 via-neutral-950 to-black"
-      )}
-    >
+    <div className={shellClass} data-density={density}>
       {/* Fondo */}
       <div className="pointer-events-none absolute inset-0">
         <div
@@ -483,6 +1429,7 @@ const Display: React.FC = () => {
         />
         {!disableFX && <div className={pick(isLight ?? false, "noise-layer opacity-[.04]", "noise-layer opacity-10")} />}
         <div className={pick(isLight ?? false, "bg-logo bg-logo--light", "bg-logo")} />
+        <BokehBackdrop isLight={!!isLight} disableFX={disableFX} />
         {!disableFX && <div className={pick(isLight ?? false, "scanlines opacity-[.03]", "scanlines opacity-[.06]")} />}
         {!disableFX && (
           <>
@@ -529,11 +1476,18 @@ const Display: React.FC = () => {
         {/* HUD principal */}
         {active && (
           <section
-            className={pick(
-              isLight ?? false,
-              "relative overflow-hidden rounded-3xl border border-zinc-200 bg-white/70 shadow-sm backdrop-blur p-6 md:p-8 hud-frame sweep",
-              "relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 hud-frame sweep"
-            )}
+            className={[
+              pick(
+                isLight ?? false,
+                "relative overflow-hidden rounded-3xl border border-zinc-200 bg-white/70 shadow-sm backdrop-blur p-6 md:p-8 hud-frame sweep",
+                "relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 hud-frame sweep"
+              ),
+              frameDensityClass,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={frameScaleStyle}
+            data-scale={clampScale(hudScale)}
           >
             {/* Encabezado */}
             <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -543,7 +1497,9 @@ const Display: React.FC = () => {
 
               <span className={pick(!!isLight, "text-zinc-600 text-sm inline-flex items-center gap-2", "text-zinc-300 text-sm inline-flex items-center gap-2")}>
                 <IconLayers className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                {active.timer.mode === "break" ? <>Break</> : <>Ronda • {active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted} / {active.roundsTotal}</>}
+                {active.timer.mode === "break"
+                  ? <>Descanso</>
+                  : <>Ronda • {active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted} / {active.roundsTotal}</>}
               </span>
 
               <span className={pick(!!isLight, "ml-auto text-zinc-600 text-sm inline-flex items-center gap-2", "ml-auto text-zinc-300 text-sm inline-flex items-center gap-2")}>
@@ -553,13 +1509,7 @@ const Display: React.FC = () => {
             </div>
 
             {/* Título */}
-            <h1
-              className={pick(
-                !!isLight,
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance text-zinc-900",
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance"
-              )}
-            >
+            <h1 className={headingClass}>
               <span
                 className={pick(
                   !!isLight,
@@ -572,126 +1522,125 @@ const Display: React.FC = () => {
             </h1>
 
             {/* HH : MM : SS */}
-            <div className="grid grid-cols-3 gap-4 mb-7" aria-live="polite">
-              <TimeBlock value={h} label="HORAS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={m} label="MINUTOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={s} label="SEGUNDOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-            </div>
+            <div className={columnsClass}>
+              <div className={stackGapClass} aria-live="polite">
+                <div className={timeGridClass}>
+                  <TimeBlock
+                    value={h}
+                    label="HORAS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                  <TimeBlock
+                    value={m}
+                    label="MINUTOS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                  <TimeBlock
+                    value={s}
+                    label="SEGUNDOS"
+                    accent={active?.timer.mode === "break" ? "amber" : "indigo"}
+                    isLight={!!isLight}
+                    density={density}
+                  />
+                </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-sm">
-              <StatCard label="Estado" isLight={!!isLight}>
-                <span
-                  className={(() => {
-                    const base = "inline-flex items-center gap-2";
-                    if (stateLabel === "En curso") return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
-                    if (stateLabel === "Pausado") return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
-                    if (stateLabel === "Terminado") return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
-                    return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
-                  })()}
-                >
-                  <span className="relative inline-flex">
+                <div className={statsGridClass}>
+                  <StatCard label="Estado" isLight={!!isLight} density={density}>
                     <span
                       className={(() => {
-                        if (stateLabel === "En curso") return "status-dot bg-emerald-500";
-                        if (stateLabel === "Pausado") return "status-dot bg-amber-500";
-                        if (stateLabel === "Terminado") return "status-dot bg-rose-500";
-                        return "status-dot bg-zinc-400";
+                        const base = "inline-flex items-center gap-2";
+                        if (stateLabel === "En curso")
+                          return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
+                        if (stateLabel === "Pausado")
+                          return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
+                        if (stateLabel === "Terminado")
+                          return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
+                        return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
                       })()}
-                    />
-                    {(stateLabel === "En curso" || stateLabel === "Pausado") && (
-                      <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
-                    )}
-                  </span>
-                  {stateLabel}
-                </span>
-              </StatCard>
+                    >
+                      <span className="relative inline-flex">
+                        <span
+                          className={(() => {
+                            if (stateLabel === "En curso") return "status-dot bg-emerald-500";
+                            if (stateLabel === "Pausado") return "status-dot bg-amber-500";
+                            if (stateLabel === "Terminado") return "status-dot bg-rose-500";
+                            return "status-dot bg-zinc-400";
+                          })()}
+                        />
+                        {(stateLabel === "En curso" || stateLabel === "Pausado") && (
+                          <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
+                        )}
+                      </span>
+                      {stateLabel}
+                    </span>
+                  </StatCard>
 
-              <StatCard label="ETA fin torneo" isLight={!!isLight}>
-                {(() => {
-                  const perRound = active.roundMinutes * 60_000;
-                  const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
-                  const inRound =
-                    active.timer.target !== null &&
-                    (active.timer.running || active.timer.remainingMs > 0) &&
-                    active.timer.mode === "round";
-                  const left =
-                    active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
-                  const eta =
-                    remaining +
-                    Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
-                  return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
-                })()}
-              </StatCard>
+                  <StatCard label="ETA fin torneo" isLight={!!isLight} density={density}>
+                    {(() => {
+                      const perRound = active.roundMinutes * 60_000;
+                      const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
+                      const inRound =
+                        active.timer.target !== null &&
+                        (active.timer.running || active.timer.remainingMs > 0) &&
+                        active.timer.mode === "round";
+                      const left =
+                        active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
+                      const eta =
+                        remaining +
+                        Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
+                      return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
+                    })()}
+                  </StatCard>
 
-              <StatCard label="Break" isLight={!!isLight}>
-                <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-700", "inline-flex items-center gap-2 text-zinc-200")}>
-                  <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                  {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
-                </span>
-              </StatCard>
-            </div>
-
-            {/* Progreso */}
-            <div className="mb-2">
-              <div
-                className={pick(
-                  !!isLight,
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 relative",
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-800/80 relative"
-                )}
-                style={
-                  {
-                    ["--p" as any]: displayPct,
-                    ["--c1" as any]: accent === "amber" ? "#FFB457" : isLight ? "#0ea5e9" : "#00eaff",
-                    ["--c2" as any]: accent === "amber" ? "#FF3D81" : isLight ? "#6366f1" : "#8b5cf6",
-                    color: "var(--c2)",
-                  } as React.CSSProperties
-                }
-              >
-                <div className={`h-full progress-stripes progress-fill ${transitionClass}`} style={{ width: `${displayPct}%` }} />
-                <span className="progress-comet" aria-hidden />
-                <span className="progress-tip" aria-hidden />
-                <span className="progress-edge" aria-hidden />
-              </div>
-              <div className={pick(!!isLight, "mt-2 text-[12px] text-zinc-600 flex items-center gap-2", "mt-2 text-[12px] text-zinc-400 flex items-center gap-2")}>
-                <IconPlay className={pick(!!isLight, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} />
-                {active.timer.mode === "break" ? "Progreso del break" : "Progreso de la ronda"}
-              </div>
-            </div>
-
-            {/* Hitos */}
-            {schedule.length > 0 && (
-              <div
-                className={pick(
-                  !!isLight,
-                  "mt-5 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
-                  "mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
-                )}
-              >
-                <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>
-                  Próximos hitos
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {schedule.map((it, i) => (
+                  <StatCard label="Descanso" isLight={!!isLight} density={density}>
                     <span
-                      key={i}
                       className={pick(
                         !!isLight,
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm chip-glow",
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-1.5 text-sm chip-glow"
+                        "inline-flex items-center gap-2 text-zinc-700",
+                        "inline-flex items-center gap-2 text-zinc-200"
                       )}
                     >
-                      <IconClock className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                      <span className={pick(!!isLight, "text-zinc-600", "text-zinc-300")}>{it.label}:</span>
-                      <strong className={pick(!!isLight, "tracking-tight text-zinc-900", "tracking-tight text-zinc-100")}>
-                        {it.time}
-                      </strong>
+                      <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                      {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
                     </span>
-                  ))}
+                  </StatCard>
                 </div>
               </div>
-            )}
+
+              <div className={sideStackClass}>
+                <ProgressPanel
+                  isLight={!!isLight}
+                  accent={accent}
+                  displayPct={displayPct}
+                  transitionClass={transitionClass}
+                  stateLabel={stateLabel}
+                  nextEvent={nextEvent}
+                  remaining={remaining}
+                  mode={active.timer.mode ?? null}
+                  currentRound={trackData?.current ?? null}
+                  roundMinutes={active.roundMinutes}
+                  breakMinutes={active.breakMinutes}
+                  breakEnabled={active.breakEnabled}
+                  density={density}
+                  fxDisabled={disableFX}
+                />
+
+                {(hasTrack || hasSchedule) && (
+                  <RoundSummaryPanel
+                    track={trackData}
+                    schedule={schedule}
+                    isLight={!!isLight}
+                    density={density}
+                    accent={trackAccent}
+                    stateLabel={stateLabel}
+                  />
+                )}
+              </div>
+            </div>
           </section>
         )}
 
@@ -721,7 +1670,7 @@ const Display: React.FC = () => {
                       <span className={pick(!!lightCard, "text-zinc-600", "text-zinc-300")}>
                         {t.timer.mode === "break" ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <IconCoffee className={pick(!!lightCard, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} /> Break
+                            <IconCoffee className={pick(!!lightCard, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} /> Descanso
                           </span>
                         ) : (
                           <>Ronda • {roundIdx} / {t.roundsTotal}</>
