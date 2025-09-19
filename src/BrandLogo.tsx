@@ -15,7 +15,7 @@ export const BrandLogo: React.FC<{ size?: number; alt?: string; className?: stri
     opacity:.22, filter:'blur(10px)', mixBlendMode:'color-dodge'
   };
   const img: React.CSSProperties = {
-    position:'absolute', inset: `${Math.round(px*0.18)}px`, backgroundImage:'var(--sigad-logo-url)', backgroundRepeat:'no-repeat',
+    position:'absolute', inset: `${Math.round(px*0.14)}px`, backgroundImage:'var(--sigad-logo-url)', backgroundRepeat:'no-repeat',
     backgroundPosition:'center', backgroundSize:'contain', filter:'drop-shadow(0 2px 4px rgba(0,0,0,.6)) saturate(1.05) brightness(1.02)'
   } as React.CSSProperties;
   const fallback: React.CSSProperties = {

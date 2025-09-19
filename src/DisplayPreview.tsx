@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { emitAll, type TimeFmt } from './displayChannel';
 import type { Tournament } from './App';
 
+type HudDensity = 'compact' | 'standard' | 'expanded';
+const HUD_DENSITIES: HudDensity[] = ['compact', 'standard', 'expanded'];
+const HUD_DENSITY_KEY_GLOBAL = 'sigad-hud-density';
+const HUD_SCALE_KEY_GLOBAL = 'sigad-hud-scale';
+const ZOOM_PRESETS = [70, 85, 100, 115, 130, 140];
+
 /**
  * DisplayPreview • v4.2
  * - Prioriza torneos corriendo (max 3).
@@ -50,6 +56,14 @@ export const DisplayPreview: React.FC<{
   const LS_FIT = 'sigad_preview_fit_v1';
   const [fitMap, setFitMap] = useState<Record<string, 'contain'|'width'|'height'>>(() => readObj(LS_FIT));
 
+  // HUD density
+  const LS_DENSITY = 'sigad_preview_density_v1';
+  const [densityMap, setDensityMap] = useState<Record<string, HudDensity>>(() => readObj(LS_DENSITY));
+
+  // HUD scale
+  const LS_SCALE = 'sigad_preview_scale_v1';
+  const [scaleMap, setScaleMap] = useState<Record<string, number>>(() => readObj(LS_SCALE));
+
   // Overlay heights
   const LS_H_EXP = 'sigad_preview_h_exp_v1';
   const [expHeights, setExpHeights] = useState<Record<string, number>>(() => readObj(LS_H_EXP));
@@ -59,6 +73,8 @@ export const DisplayPreview: React.FC<{
   useEffect(() => { try { localStorage.setItem(LS_H, JSON.stringify(heights)); } catch {} }, [heights]);
   useEffect(() => { try { localStorage.setItem(LS_FX, JSON.stringify(fxMap)); } catch {} }, [fxMap]);
   useEffect(() => { try { localStorage.setItem(LS_FIT, JSON.stringify(fitMap)); } catch {} }, [fitMap]);
+  useEffect(() => { try { localStorage.setItem(LS_DENSITY, JSON.stringify(densityMap)); } catch {} }, [densityMap]);
+  useEffect(() => { try { localStorage.setItem(LS_SCALE, JSON.stringify(scaleMap)); } catch {} }, [scaleMap]);
   useEffect(() => { try { localStorage.setItem(LS_H_EXP, JSON.stringify(expHeights)); } catch {} }, [expHeights]);
 
   const getH     = (id: string) => clampSidebarH(heights[id] ?? DEFAULT_H);
@@ -71,6 +87,52 @@ export const DisplayPreview: React.FC<{
     const next = cur === 'contain' ? 'width' : cur === 'width' ? 'height' : 'contain';
     return { ...prev, [id]: next };
   });
+  const setFitMode = (id: string, mode: 'contain'|'width'|'height') => setFitMap(prev => ({ ...prev, [id]: mode }));
+  const pushDensity = (id: string, mode: HudDensity) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '*';
+    const targetOrigin = origin || '*';
+    const frame = document.getElementById(`prev-${id}`) as HTMLIFrameElement | null;
+    frame?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
+    const expanded = document.getElementById(`prev-exp-${id}`) as HTMLIFrameElement | null;
+    expanded?.contentWindow?.postMessage({ type: 'HUD_DENSITY', value: mode }, targetOrigin);
+    try { localStorage.setItem(HUD_DENSITY_KEY_GLOBAL, mode); } catch {}
+  };
+  const pushScale = (id: string, value: number) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '*';
+    const targetOrigin = origin || '*';
+    const frame = document.getElementById(`prev-${id}`) as HTMLIFrameElement | null;
+    frame?.contentWindow?.postMessage({ type: 'HUD_SCALE', value }, targetOrigin);
+    const expanded = document.getElementById(`prev-exp-${id}`) as HTMLIFrameElement | null;
+    expanded?.contentWindow?.postMessage({ type: 'HUD_SCALE', value }, targetOrigin);
+    try { localStorage.setItem(HUD_SCALE_KEY_GLOBAL, String(value)); } catch {}
+  };
+  const getDensity = (id: string): HudDensity => (densityMap[id] as HudDensity) ?? 'standard';
+  const setDensity = (id: string, mode: HudDensity) => setDensityMap(prev => ({ ...prev, [id]: mode }));
+  const applyDensity = (id: string, mode: HudDensity) => {
+    setDensity(id, mode);
+    pushDensity(id, mode);
+  };
+  const cycleDensityMode = (id: string) => {
+    const current = getDensity(id);
+    const idx = HUD_DENSITIES.indexOf(current);
+    const next = HUD_DENSITIES[(idx + 1) % HUD_DENSITIES.length];
+    applyDensity(id, next);
+  };
+  const densityLabel = (mode: HudDensity) => (mode === 'compact' ? 'Compacto' : mode === 'expanded' ? 'Amplio' : 'Equilibrado');
+  const clampScalePct = (v: number) => Math.max(70, Math.min(140, Math.round(v)));
+  const getScale = (id: string) => clampScalePct(scaleMap[id] ?? 100);
+  const updateScale = (id: string, value: number) => {
+    const next = clampScalePct(value);
+    setScaleMap(prev => {
+      if (prev[id] === next) return prev;
+      return { ...prev, [id]: next };
+    });
+    pushScale(id, next);
+  };
+  const nudgeScale = (id: string, delta: number) => {
+    const current = getScale(id);
+    updateScale(id, current + delta);
+  };
   const getExpH  = (id: string) => clampOverlayH(expHeights[id] ?? DEFAULT_H_EXP);
   const setExpH  = (id: string, v: number) => setExpHeights(prev => ({ ...prev, [id]: clampOverlayH(v) }));
 
@@ -83,7 +145,7 @@ export const DisplayPreview: React.FC<{
   /* ---------- TICK local para HUD (countdown vivo) ---------- */
   const [, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick(v => (v+1)%1_000_000), 500); // 2 Hz
+    const id = setInterval(() => setTick(v => (v+1)%1_000_000), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -162,6 +224,7 @@ export const DisplayPreview: React.FC<{
     return () => window.removeEventListener('keydown', onKey);
   }, [expandedId]);
 
+
   /* ---------- Medición de ancho por tarjeta (ResizeObserver) ---------- */
   const [boxW, setBoxW] = useState<Record<string, number>>({});
   const observersRef = useRef<Record<string, ResizeObserver | null>>({});
@@ -191,7 +254,11 @@ export const DisplayPreview: React.FC<{
 
   /* ---------- Carga/estado de iframes ---------- */
   const [loaded, setLoaded] = useState<Record<string, boolean>>({});
-  const markLoaded = (id: string) => setLoaded(prev => ({ ...prev, [id]: true }));
+  const markLoaded = (id: string) => {
+    setLoaded(prev => ({ ...prev, [id]: true }));
+    pushDensity(id, getDensity(id));
+    pushScale(id, getScale(id));
+  };
   const reloadFrame = (id: string) => {
     const iframe = document.getElementById(id) as HTMLIFrameElement | null;
     if (!iframe) return;
@@ -230,7 +297,7 @@ export const DisplayPreview: React.FC<{
     const inRound = t.timer.mode === 'round' && (t.timer.running || t.timer.remainingMs > 0);
     const roundIdx = inRound ? t.roundsCompleted + 1 : t.roundsCompleted;
     const phase =
-      t.timer.mode === 'break' ? 'Break'
+      t.timer.mode === 'break' ? 'Descanso'
       : `Ronda ${Math.max(1, Math.min(roundIdx || 1, t.roundsTotal))}/${t.roundsTotal}`;
     return { state, color, remaining: rem, remainingFmt: formatSplit(rem), phase };
   };
@@ -260,8 +327,11 @@ export const DisplayPreview: React.FC<{
         {sorted.map(t => {
           const hNow = getH(t.id);
           const fit = getFit(t.id);
+          const density = getDensity(t.id);
+          const hudScale = getScale(t.id);
           const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
-          const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
+          const baseUrl = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
+          const windowUrl = `${baseUrl}&hud=${density}&scale=${hudScale}`;
 
           // Medición de ancho disponible:
           const availW = Math.max(240, (boxW[t.id] ?? 0) || 0);
@@ -270,84 +340,131 @@ export const DisplayPreview: React.FC<{
           const sH = Math.max(0.1, hNow / baseH);
           const sW = Math.max(0.1, availW / baseW);
           const raw = fit === 'height' ? sH : fit === 'width' ? sW : Math.min(sH, sW);
-          const scale = snapScale(raw);
+          const previewScale = snapScale(raw);
 
-          const frameW = Math.round(baseW * scale);
-          const frameH = Math.round(baseH * scale);
-          const scalePct = Math.round(scale * 100);
+          const frameW = Math.round(baseW * previewScale);
+          const frameH = Math.round(baseH * previewScale);
+          const previewScalePct = Math.round(previewScale * 100);
 
           const { state, color, remainingFmt, phase } = stateInfo(t);
+          const densityName = densityLabel(density);
+          const fitLabel = fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ancho' : 'Alto';
 
           return (
-            <div key={t.id} className="card bg-body border-0 shadow-sm" style={{ overflow: 'hidden' }}>
-              {/* ===== Header con grupos ===== */}
+            <div key={t.id} className="card bg-body border-0 shadow-sm" style={{ overflow: 'visible' }}>
+              {/* ===== Header reorganizado ===== */}
               <div className="card-header bg-body border-0 py-2">
-                <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <strong className="text-truncate">{t.name}</strong>
-                  <span className="badge text-bg-secondary">{t.game}</span>
+                <div className="d-flex flex-wrap align-items-center gap-2 w-100">
+                  <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+                    <strong className="text-truncate">{t.name}</strong>
+                    <span className="badge text-bg-secondary">{t.game}</span>
+                  </div>
+                  <span className="badge" style={{ backgroundColor: color }}>{state}</span>
+                  <span className="text-secondary small text-truncate">{phase}</span>
+                  <span className="text-secondary small d-none d-md-inline">⏱ {remainingFmt}</span>
 
-                  <div className="ms-auto d-flex align-items-center flex-wrap gap-2">
-                    {/* Grupo 1: Ajuste + Expandir */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste y expandir">
-                      <button
-                        className="btn btn-outline-light"
-                        onClick={() => cycleFit(t.id)}
-                        title={`Ajuste: ${fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ajustar al ancho' : 'Ajustar al alto'}`}
-                        aria-label="Cambiar modo de ajuste"
-                      >
-                        {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                        <span className="d-none d-md-inline ms-1">
-                          {fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}
-                        </span>
-                      </button>
-                      <button className="btn btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">
-                        ⤢ <span className="d-none d-md-inline ms-1">Expandir</span>
-                      </button>
-                    </div>
-
-                    <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                    {/* Grupo 2: Tema + FX */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Tema y efectos">
-                      <button
-                        className={(t.displayTheme || 'dark') === 'light' ? 'btn btn-warning' : 'btn btn-outline-warning'}
-                        onClick={() => onToggleTheme(t.id)}
-                        title="Alternar tema del display (claro/oscuro)"
-                      >
-                        {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
-                        <span className="d-none d-md-inline ms-1">Tema</span>
-                      </button>
-                      <button
-                        className={isFxOn(t.id) ? 'btn btn-outline-warning' : 'btn btn-warning'}
-                        onClick={() => toggleFx(t.id)}
-                        title={isFxOn(t.id) ? 'Desactivar efectos' : 'Activar efectos'}
-                      >
-                        {isFxOn(t.id) ? '✨' : '🚫'}
-                        <span className="d-none d-md-inline ms-1">FX</span>
-                      </button>
-                    </div>
-
-                    <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                    {/* Grupo 3: Ventana + Recargar */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                      <a
-                        className="btn btn-outline-light"
-                        href={url}
-                        target={`SIGAD_DISPLAY_${t.id}`}
-                        rel="noreferrer"
-                        title="Abrir en ventana"
-                      >
-                        ↗ <span className="d-none d-md-inline ms-1">Ventana</span>
-                      </a>
-                      <button
-                        className="btn btn-outline-light"
-                        onClick={() => reloadFrame(`prev-${t.id}`)}
-                        title="Recargar"
-                      >
-                        ↻ <span className="d-none d-md-inline ms-1">Recargar</span>
-                      </button>
-                    </div>
+                  <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
+                    <span className="badge text-bg-dark d-md-none">⏱ {remainingFmt}</span>
+                    <button
+                      className="btn btn-sm btn-outline-light"
+                      onClick={() => cycleFit(t.id)}
+                      title={`Ajuste: ${fitLabel}`}
+                      aria-label={`Cambiar ajuste (${fitLabel})`}
+                    >
+                      {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
+                    </button>
+                    <button className="btn btn-sm btn-outline-light" onClick={() => reloadFrame(`prev-${t.id}`)} title="Recargar vista previa" aria-label="Recargar vista previa">↻</button>
+                    <a
+                      className="btn btn-sm btn-outline-light"
+                      href={windowUrl}
+                      target={`SIGAD_DISPLAY_${t.id}`}
+                      rel="noreferrer"
+                      title="Abrir en ventana"
+                    >
+                      ↗
+                    </a>
+                    <button className="btn btn-sm btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">⤢</button>
+                    <details className="preview-menu">
+                      <summary className="btn btn-sm btn-outline-light" title="Más ajustes">⚙️</summary>
+                      <div className="preview-menu__body">
+                        <div className="preview-menu__section">
+                          <span className="preview-menu__label">Densidad del HUD</span>
+                          <div className="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'compact')}>Compacto</button>
+                            <button type="button" className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'standard')}>Equilibrado</button>
+                            <button type="button" className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'expanded')}>Amplio</button>
+                          </div>
+                        </div>
+                        <div className="preview-menu__section">
+                          <span className="preview-menu__label">Zoom rápido</span>
+                          <div className="d-flex flex-wrap gap-2">
+                            {ZOOM_PRESETS.map(val => (
+                              <button
+                                key={val}
+                                type="button"
+                                className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                onClick={() => updateScale(t.id, val)}
+                              >
+                                {val}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="preview-menu__section">
+                          <span className="preview-menu__label">Vista</span>
+                          <div className="btn-group btn-group-sm w-100" role="group">
+                            <button type="button" className={`btn ${fit === 'contain' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'contain')}>Contener</button>
+                            <button type="button" className={`btn ${fit === 'width' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'width')}>Ancho</button>
+                            <button type="button" className={`btn ${fit === 'height' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'height')}>Alto</button>
+                          </div>
+                          <div className="d-flex flex-column gap-2 mt-2">
+                            <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => onToggleTheme(t.id)}>
+                              {(t.displayTheme || 'dark') === 'dark' ? 'Tema claro' : 'Tema oscuro'}
+                            </button>
+                            <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => toggleFx(t.id)}>
+                              {isFxOn(t.id) ? 'Desactivar FX' : 'Activar FX'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="preview-menu__section border-top pt-3">
+                          <button type="button" className="btn btn-sm btn-outline-light w-100" onClick={() => reloadFrame(`prev-${t.id}`)}>↻ Recargar vista</button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-secondary w-100"
+                            onClick={() => {
+                              setH(t.id, DEFAULT_H);
+                              setFitMode(t.id, 'contain');
+                              applyDensity(t.id, 'standard');
+                              updateScale(t.id, 100);
+                            }}
+                          >
+                            Restablecer ajustes
+                          </button>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+                <div className="d-flex flex-wrap align-items-center gap-3 mt-2">
+                  <div className="d-flex align-items-center gap-2 flex-grow-1">
+                    <span className="text-secondary small">Zoom del HUD</span>
+                    <button className="btn btn-sm btn-outline-light" onClick={() => nudgeScale(t.id, -5)} title="Reducir zoom del HUD" aria-label="Reducir zoom del HUD">−</button>
+                    <input
+                      type="range"
+                      min={70}
+                      max={140}
+                      step={5}
+                      value={hudScale}
+                      onChange={e => updateScale(t.id, Number(e.target.value))}
+                      className="form-range preview-toolbar__slider"
+                      aria-label="Zoom del HUD"
+                    />
+                    <button className="btn btn-sm btn-outline-light" onClick={() => nudgeScale(t.id, 5)} title="Ampliar zoom del HUD" aria-label="Ampliar zoom del HUD">+</button>
+                    <span className="badge text-bg-dark">HUD {hudScale}%</span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <button className="btn btn-sm btn-outline-light" onClick={() => cycleDensityMode(t.id)} title="Cambiar densidad del HUD">Densidad: {densityName}</button>
+                    <span className="badge text-bg-secondary">Vista {previewScalePct}%</span>
                   </div>
                 </div>
               </div>
@@ -462,14 +579,14 @@ export const DisplayPreview: React.FC<{
                     {/* IFRAME */}
                     <iframe
                       id={`prev-${t.id}`}
-                      src={url}
+                      src={baseUrl}
                       title={`preview-${t.name}`}
                       onLoad={() => markLoaded(t.id)}
                       style={{
                         width: baseW,
                         height: baseH,
                         border: 0,
-                        transform: `scale(${scale}) translateZ(0)`,
+                        transform: `scale(${previewScale}) translateZ(0)`,
                         transformOrigin: 'top left',
                         willChange: 'transform',
                         background: 'transparent'
@@ -493,8 +610,9 @@ export const DisplayPreview: React.FC<{
                         zIndex: 2
                       }}
                     >
-                      <span>{scalePct}%</span>
-                      <span style={{ opacity: 0.85 }}>{fit}</span>
+                      <span>Vista {previewScalePct}%</span>
+                      <span style={{ opacity: 0.85 }}>{fitLabel}</span>
+                      <span style={{ opacity: 0.7 }}>Zoom {hudScale}% · {densityName}</span>
                     </div>
                   </div>
                 </div>
@@ -526,233 +644,275 @@ export const DisplayPreview: React.FC<{
       </section>
 
       {/* ---------- Overlay Expandido (misma distribución de botones) ---------- */}
-      {expandedId && (() => {
-        const t = tournaments.find(x => x.id === expandedId);
-        if (!t) return null;
-        const fit = getFit(t.id);
-        const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
-        const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
 
-        // Dimensiones disponibles
-        const outerPad = 24;
-        const availableW = Math.max(320, window.innerWidth - outerPad * 2);
-        const availableH = Math.max(260, window.innerHeight - outerPad * 2 - 56 /*header*/);
+{expandedId && (() => {
+  const t = tournaments.find(x => x.id === expandedId);
+  if (!t) return null;
+  const fit = getFit(t.id);
+  const density = getDensity(t.id);
+  const hudScale = getScale(t.id);
+  const densityName = densityLabel(density);
+  const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
+  const baseUrl = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
+  const windowUrl = `${baseUrl}&hud=${density}&scale=${hudScale}`;
 
-        const targetH = Math.min(getExpH(t.id), availableH);
-        const sH = Math.max(0.1, targetH / baseH);
-        const sW = Math.max(0.1, availableW / baseW);
-        const raw = fit === 'height' ? sH : fit === 'width' ? sW : Math.min(sH, sW);
-        const scale = snapScale(raw);
+  // Dimensiones disponibles
+  const outerPad = 24;
+  const availableW = Math.max(320, window.innerWidth - outerPad * 2);
+  const availableH = Math.max(260, window.innerHeight - outerPad * 2 - 56);
 
-        const w = Math.round(baseW * scale);
-        const h = Math.round(baseH * scale);
-        const scalePct = Math.round(scale * 100);
-        const { state, color, remainingFmt, phase } = stateInfo(t);
+  const targetH = Math.min(getExpH(t.id), availableH);
+  const sH = Math.max(0.1, targetH / baseH);
+  const sW = Math.max(0.1, availableW / baseW);
+  const raw = fit === 'height' ? sH : fit === 'width' ? sW : Math.min(sH, sW);
+  const previewScale = snapScale(raw);
 
-        return (
-          <div
-            role="dialog"
-            aria-modal="true"
-            style={{
-              position: 'fixed', inset: 0, zIndex: 3000,
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}
-          >
-            <div
-              onClick={() => setExpandedId(null)}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)' }}
-            />
-            <div
-              className="shadow-lg"
-              style={{
-                position: 'relative',
-                width: 'min(1140px, 96vw)',
-                maxWidth: '96vw',
-                background: '#11141a',
-                border: '1px solid #2c313a',
-                borderRadius: 12,
-                padding: `${outerPad}px`,
-              }}
-            >
-              {/* Header overlay con grupos */}
-              <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                <strong className="text-truncate">{t.name}</strong>
-                <span className="badge text-bg-secondary">{t.game}</span>
+  const w = Math.round(baseW * previewScale);
+  const h = Math.round(baseH * previewScale);
+  const previewScalePct = Math.round(previewScale * 100);
+  const { state, color, remainingFmt, phase } = stateInfo(t);
+  const fitLabel = fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ancho' : 'Alto';
 
-                {/* HUD compacto */}
-                <span className="ms-auto d-flex align-items-center gap-2 small text-secondary">
-                  <span
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '2px 8px', borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb'
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: color, boxShadow: `0 0 0 3px ${color}22` }} />
-                    {state}
-                  </span>
-                  <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
-                    ⏱ {remainingFmt}
-                  </span>
-                  <span className="d-none d-sm-inline" style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
-                    {phase}
-                  </span>
-                </span>
-
-                <div className="d-flex align-items-center flex-wrap gap-2">
-                  <span className="small text-secondary me-1">{scalePct}%</span>
-
-                  {/* Grupo 1 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste">
-                    <button
-                      className="btn btn-outline-light"
-                      onClick={() => cycleFit(t.id)}
-                      title={`Ajuste: ${fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ajustar al ancho' : 'Ajustar al alto'}`}
-                    >
-                      {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                      <span className="d-none d-md-inline ms-1">{fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}</span>
-                    </button>
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 3000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}
+    >
+      <div
+        onClick={() => setExpandedId(null)}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)' }}
+      />
+      <div
+        className="shadow-lg"
+        style={{
+          position: 'relative',
+          width: 'min(1140px, 96vw)',
+          maxWidth: '96vw',
+          background: '#11141a',
+          border: '1px solid #2c313a',
+          borderRadius: 12,
+          padding: `${outerPad}px`,
+        }}
+      >
+        {/* Header overlay reorganizado */}
+        <div className="d-flex flex-column gap-3 mb-3">
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <strong className="text-truncate fs-5">{t.name}</strong>
+            <span className="badge text-bg-secondary">{t.game}</span>
+            <span className="badge" style={{ backgroundColor: color }}>{state}</span>
+            <span className="text-secondary small text-truncate">{phase}</span>
+            <span className="text-secondary small">⏱ {remainingFmt}</span>
+            <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => setExpandedId(null)} title="Cerrar (Esc)">✕ Cerrar</button>
+              <button className="btn btn-sm btn-outline-light" onClick={() => cycleFit(t.id)} title={`Ajuste: ${fitLabel}`} aria-label={`Cambiar ajuste (${fitLabel})`}>{fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}</button>
+              <button className="btn btn-sm btn-outline-light" onClick={() => reloadFrame(`prev-exp-${t.id}`)} title="Recargar vista" aria-label="Recargar vista">↻</button>
+              <a className="btn btn-sm btn-outline-light" href={windowUrl} target={`SIGAD_DISPLAY_${t.id}`} rel="noreferrer" title="Abrir en ventana">↗</a>
+              <details className="preview-menu">
+                <summary className="btn btn-sm btn-outline-light" title="Más ajustes">⚙️</summary>
+                <div className="preview-menu__body">
+                  <div className="preview-menu__section">
+                    <span className="preview-menu__label">Densidad del HUD</span>
+                    <div className="btn-group btn-group-sm w-100" role="group">
+                      <button type="button" className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'compact')}>Compacto</button>
+                      <button type="button" className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'standard')}>Equilibrado</button>
+                      <button type="button" className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'expanded')}>Amplio</button>
+                    </div>
                   </div>
-
-                  <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                  {/* Grupo 2 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Tema y efectos">
-                    <button
-                      className={(t.displayTheme || 'dark') === 'light' ? 'btn btn-warning' : 'btn btn-outline-warning'}
-                      onClick={() => onToggleTheme(t.id)}
-                      title="Alternar tema del display"
-                    >
-                      {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
-                      <span className="d-none d-md-inline ms-1">Tema</span>
-                    </button>
-                    <button
-                      className={isFxOn(t.id) ? 'btn btn-outline-warning' : 'btn btn-warning'}
-                      onClick={() => toggleFx(t.id)}
-                      title={isFxOn(t.id) ? 'Desactivar efectos' : 'Activar efectos'}
-                    >
-                      {isFxOn(t.id) ? '✨' : '🚫'} <span className="d-none d-md-inline ms-1">FX</span>
-                    </button>
+                  <div className="preview-menu__section">
+                    <span className="preview-menu__label">Zoom rápido</span>
+                    <div className="d-flex flex-wrap gap-2">
+                      {ZOOM_PRESETS.map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                          onClick={() => updateScale(t.id, val)}
+                        >
+                          {val}%
+                        </button>
+                      ))}
+                    </div>
                   </div>
-
-                  <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                  {/* Grupo 3 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                    <a className="btn btn-outline-light" href={url} target={`SIGAD_DISPLAY_${t.id}`} rel="noreferrer" title="Abrir en ventana">↗<span className="d-none d-md-inline ms-1">Ventana</span></a>
-                    <button className="btn btn-outline-light" onClick={() => reloadFrame(`prev-exp-${t.id}`)} title="Recargar">↻<span className="d-none d-md-inline ms-1">Recargar</span></button>
-                    <button className="btn btn-outline-secondary" onClick={() => setExpandedId(null)} title="Cerrar (Esc)">✕<span className="d-none d-md-inline ms-1">Cerrar</span></button>
+                  <div className="preview-menu__section">
+                    <span className="preview-menu__label">Vista</span>
+                    <div className="btn-group btn-group-sm w-100" role="group">
+                      <button type="button" className={`btn ${fit === 'contain' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'contain')}>Contener</button>
+                      <button type="button" className={`btn ${fit === 'width' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'width')}>Ancho</button>
+                      <button type="button" className={`btn ${fit === 'height' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMode(t.id, 'height')}>Alto</button>
+                    </div>
+                    <div className="d-flex flex-column gap-2 mt-2">
+                      <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => onToggleTheme(t.id)}>
+                        {(t.displayTheme || 'dark') === 'dark' ? 'Tema claro' : 'Tema oscuro'}
+                      </button>
+                      <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => toggleFx(t.id)}>
+                        {isFxOn(t.id) ? 'Desactivar FX' : 'Activar FX'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="preview-menu__section border-top pt-3">
+                    <button type="button" className="btn btn-sm btn-outline-light w-100" onClick={() => reloadFrame(`prev-exp-${t.id}`)}>↻ Recargar vista</button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary w-100"
+                      onClick={() => {
+                        setExpH(t.id, DEFAULT_H_EXP);
+                        setFitMode(t.id, 'contain');
+                        applyDensity(t.id, 'standard');
+                        updateScale(t.id, 100);
+                      }}
+                    >
+                      Restablecer ajustes
+                    </button>
                   </div>
                 </div>
+              </details>
+            </div>
+          </div>
+          <div className="d-flex flex-wrap align-items-center gap-3">
+            <div className="d-flex align-items-center gap-2 flex-grow-1">
+              <span className="text-secondary small">Zoom del HUD</span>
+              <button className="btn btn-sm btn-outline-light" onClick={() => nudgeScale(t.id, -5)} title="Reducir zoom del HUD" aria-label="Reducir zoom del HUD">−</button>
+              <input
+                type="range"
+                min={70}
+                max={140}
+                step={5}
+                value={hudScale}
+                onChange={e => updateScale(t.id, Number(e.target.value))}
+                className="form-range preview-toolbar__slider"
+                aria-label="Zoom del HUD"
+              />
+              <button className="btn btn-sm btn-outline-light" onClick={() => nudgeScale(t.id, 5)} title="Ampliar zoom del HUD" aria-label="Ampliar zoom del HUD">+</button>
+              <span className="badge text-bg-dark">HUD {hudScale}%</span>
+            </div>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <button className="btn btn-sm btn-outline-light" onClick={() => cycleDensityMode(t.id)} title="Cambiar densidad del HUD">Densidad: {densityName}</button>
+              <span className="badge text-bg-secondary">Vista {previewScalePct}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Área del preview en overlay */}
+        <div style={{ position: 'relative', background: 'linear-gradient(180deg, rgba(255,255,255,.02), transparent)' }}>
+          <div style={{ height: targetH, display: 'grid', placeItems: 'center' }}>
+            {!loaded[t.id] && (
+              <div
+                className="position-absolute top-0 start-0 w-100 h-100"
+                style={{
+                  background:
+                    'linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)',
+                  backgroundSize: '400% 100%',
+                  animation: 'sigad-shimmer 1.2s ease-in-out infinite',
+                  zIndex: 1
+                }}
+              >
+                <div className="position-absolute top-50 start-50 translate-middle spinner-border spinner-border-sm text-secondary" />
+              </div>
+            )}
+
+            <div onDoubleClick={() => cycleFit(t.id)} style={{ width: w, height: h, overflow: 'hidden', borderRadius: 12, position: 'relative' }}>
+              <div
+                className="position-absolute d-flex align-items-center gap-2 px-2 py-1"
+                style={{
+                  top: 8,
+                  left: 8,
+                  borderRadius: 8,
+                  backdropFilter: 'blur(6px)',
+                  background: 'rgba(17,17,17,.45)',
+                  color: '#e5e7eb',
+                  fontSize: w < 540 ? 11 : 12,
+                  lineHeight: 1.1,
+                  zIndex: 2
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,.12)',
+                    background: 'rgba(0,0,0,.25)'
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: color, boxShadow: `0 0 0 3px ${color}22` }} />
+                  <strong style={{ letterSpacing: .2 }}>{state}</strong>
+                </span>
+                <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)' }}>
+                  ⏱ {remainingFmt}
+                </span>
+                <span className="d-none d-sm-inline" style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)' }}>
+                  {phase}
+                </span>
               </div>
 
-              {/* Área del preview en overlay */}
-              <div style={{ position: 'relative', background: 'linear-gradient(180deg, rgba(255,255,255,.02), transparent)' }}>
-                <div style={{ height: targetH, display: 'grid', placeItems: 'center' }}>
-                  {!loaded[t.id] && (
-                    <div
-                      className="position-absolute top-0 start-0 w-100 h-100"
-                      style={{
-                        background:
-                          'linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.05) 63%)',
-                        backgroundSize: '400% 100%',
-                        animation: 'sigad-shimmer 1.2s ease-in-out infinite',
-                        zIndex: 1
-                      }}
-                    >
-                      <div className="position-absolute top-50 start-50 translate-middle spinner-border spinner-border-sm text-secondary" />
-                    </div>
-                  )}
+              <iframe
+                id={`prev-exp-${t.id}`}
+                src={baseUrl}
+                title={`preview-expanded-${t.name}`}
+                onLoad={() => markLoaded(t.id)}
+                style={{
+                  width: baseW,
+                  height: baseH,
+                  border: 0,
+                  transform: `scale(${previewScale}) translateZ(0)`,
+                  transformOrigin: 'top left',
+                  willChange: 'transform'
+                }}
+              />
 
-                  <div onDoubleClick={() => cycleFit(t.id)} style={{ width: w, height: h, overflow: 'hidden', borderRadius: 12, position: 'relative' }}>
-                    {/* Micro-HUD superpuesto (overlay) */}
-                    <div
-                      className="position-absolute d-flex align-items-center gap-2 px-2 py-1"
-                      style={{
-                        top: 8,
-                        left: 8,
-                        borderRadius: 8,
-                        backdropFilter: 'blur(6px)',
-                        background: 'rgba(17,17,17,.45)',
-                        color: '#e5e7eb',
-                        fontSize: w < 540 ? 11 : 12,
-                        lineHeight: 1.1,
-                        zIndex: 2
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '2px 8px',
-                          borderRadius: 999,
-                          border: '1px solid rgba(255,255,255,.12)',
-                          background: 'rgba(0,0,0,.25)'
-                        }}
-                      >
-                        <span style={{ width: 8, height: 8, borderRadius: 999, background: color, boxShadow: `0 0 0 3px ${color}22` }} />
-                        <strong style={{ letterSpacing: .2 }}>{state}</strong>
-                      </span>
-                      <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)' }}>
-                        ⏱ {remainingFmt}
-                      </span>
-                      <span className="d-none d-sm-inline" style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)' }}>
-                        {phase}
-                      </span>
-                    </div>
-
-                    <iframe
-                      id={`prev-exp-${t.id}`}
-                      src={url}
-                      title={`preview-expanded-${t.name}`}
-                      onLoad={() => markLoaded(t.id)}
-                      style={{ width: baseW, height: baseH, border: 0, transform: `scale(${scale}) translateZ(0)`, transformOrigin: 'top left', willChange: 'transform' }}
-                    />
-
-                    {/* Indicador escala/mode */}
-                    <div
-                      className="position-absolute"
-                      style={{
-                        right: 8, bottom: 8,
-                        padding: '2px 8px',
-                        fontSize: 11, borderRadius: 8,
-                        background: 'rgba(0,0,0,.55)', color: '#fff',
-                        display: 'inline-flex', gap: 8, alignItems: 'center'
-                      }}
-                    >
-                      <span>{scalePct}%</span>
-                      <span style={{ opacity: .85 }}>{fit}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Barra de arrastre (overlay) */}
-                <div
-                  onPointerDown={startOverlayDrag}
-                  onDoubleClick={() => setExpH(t.id, DEFAULT_H_EXP)}
-                  style={{
-                    position: 'absolute', left: 0, right: 0, bottom: 0,
-                    height: 18, cursor: 'ns-resize',
-                    background: overlayDragging
-                      ? 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18))'
-                      : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)',
-                    display: 'grid', placeItems: 'center',
-                    borderTop: '1px dashed rgba(128,128,128,.25)'
-                  }}
-                  title="Arrastra para ajustar altura · Doble clic para restablecer"
-                >
-                  <div style={{ width: 40, height: 4, borderRadius: 2, background: overlayDragging ? 'rgba(128,128,128,.9)' : 'rgba(128,128,128,.6)' }} />
-                </div>
+              <div
+                className="position-absolute"
+                style={{
+                  right: 8,
+                  bottom: 8,
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  borderRadius: 8,
+                  background: 'rgba(0,0,0,.55)',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  gap: 8,
+                  alignItems: 'center'
+                }}
+              >
+                <span>Vista {previewScalePct}%</span>
+                <span style={{ opacity: 0.85 }}>{fitLabel}</span>
+                <span style={{ opacity: 0.7 }}>Zoom {hudScale}% · {densityName}</span>
               </div>
             </div>
           </div>
-        );
-      })()}
+
+          <div
+            onPointerDown={startOverlayDrag}
+            onDoubleClick={() => setExpH(t.id, DEFAULT_H_EXP)}
+            style={{
+              position: 'absolute', left: 0, right: 0, bottom: 0,
+              height: 18, cursor: 'ns-resize',
+              background: overlayDragging
+                ? 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18))'
+                : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)',
+              display: 'grid', placeItems: 'center',
+              borderTop: '1px dashed rgba(128,128,128,.25)'
+            }}
+            title="Arrastra para ajustar altura · Doble clic para restablecer"
+          >
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: overlayDragging ? 'rgba(128,128,128,.9)' : 'rgba(128,128,128,.6)' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
 
       {/* Estilos menores: separador y shimmer */}
       <style>{`
-        .toolbar-sep{ width:1px; height:24px; background:rgba(255,255,255,.12); opacity:.85 }
         @keyframes sigad-shimmer { 0%{background-position:100% 0} 100%{background-position:0 0} }
       `}</style>
     </>
