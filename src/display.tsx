@@ -483,10 +483,22 @@ interface RoundTrackProps {
   accent: "round" | "break";
   stateLabel: string;
   density: HudDensity;
+  className?: string;
+  hideCaption?: boolean;
 }
 
 const RoundTrack = React.memo(
-  ({ total, current, completed, isLight, accent, stateLabel, density }: RoundTrackProps) => {
+  ({
+    total,
+    current,
+    completed,
+    isLight,
+    accent,
+    stateLabel,
+    density,
+    className,
+    hideCaption,
+  }: RoundTrackProps) => {
     const safeTotal = Math.max(1, total);
     const safeCurrent = Math.min(safeTotal, Math.max(1, current));
     const safeCompleted = Math.min(safeTotal, Math.max(0, completed));
@@ -552,11 +564,12 @@ const RoundTrack = React.memo(
     density === "expanded" ? "round-track--density-expanded" : "",
     safeTotal <= 8 ? "round-track--mini" : "",
     isCrowdedRange ? "round-track--crowded" : "",
+    className ?? "",
   ]
     .filter(Boolean)
     .join(" ");
 
-  const showCaption = density !== "compact" || isCrowdedRange;
+  const showCaption = !hideCaption && (density !== "compact" || isCrowdedRange);
 
   return (
     <div
@@ -619,7 +632,150 @@ const RoundTrack = React.memo(
     prev.isLight === next.isLight &&
     prev.accent === next.accent &&
     prev.stateLabel === next.stateLabel &&
-    prev.density === next.density
+    prev.density === next.density &&
+    prev.className === next.className &&
+    prev.hideCaption === next.hideCaption
+);
+
+interface RoundSummaryPanelProps {
+  track: { total: number; current: number; completed: number } | null;
+  schedule: ScheduleItem[];
+  isLight: boolean;
+  density: HudDensity;
+  accent: "round" | "break";
+  stateLabel: string;
+}
+
+const RoundSummaryPanel = React.memo(
+  ({ track, schedule, isLight, density, accent, stateLabel }: RoundSummaryPanelProps) => {
+    const [primary, ...rest] = schedule;
+
+    const classes = [
+      "round-summary-panel",
+      `round-summary-panel--${density}`,
+      isLight ? "round-summary-panel--light" : "",
+      accent === "break" ? "round-summary-panel--break" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const metaText = (() => {
+      if (!track) return stateLabel === "Sin iniciar" ? "Aún no hay rondas activas" : "Sin rondas activas";
+      return `Ronda ${track.current} · ${track.completed}/${track.total} completadas`;
+    })();
+
+    const kindIcon = (kind: ScheduleKind, size = "size-4") => {
+      if (kind === "break") return <IconCoffee className={size} />;
+      if (kind === "final") return <IconTrophy className={size} />;
+      return <IconFlag className={size} />;
+    };
+
+    return (
+      <section className={classes} aria-label="Resumen de rondas y próximos hitos">
+        <header className="round-summary-panel__header">
+          <div>
+            <span className="round-summary-panel__eyebrow">Rondas y hitos</span>
+            <h3 className="round-summary-panel__title">
+              {accent === "break" ? "Descanso en curso" : "Ruta del torneo"}
+            </h3>
+          </div>
+          <span className="round-summary-panel__meta">{metaText}</span>
+        </header>
+
+        {primary && (
+          <div className="round-summary-panel__highlight">
+            <span
+              className={["round-summary-panel__badge", `round-summary-panel__badge--${primary.kind}`]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden
+            >
+              {kindIcon(primary.kind, "size-5")}
+            </span>
+            <div className="round-summary-panel__highlight-body">
+              <span className="round-summary-panel__highlight-label">Próximo hito</span>
+              <span className="round-summary-panel__highlight-title">{primary.label}</span>
+              <time className="round-summary-panel__highlight-time">{primary.time}</time>
+            </div>
+          </div>
+        )}
+
+        <div className="round-summary-panel__content">
+          {track && (
+            <div className="round-summary-panel__track">
+              <RoundTrack
+                total={track.total}
+                completed={track.completed}
+                current={track.current}
+                isLight={isLight}
+                accent={accent}
+                stateLabel={stateLabel}
+                density={density}
+                className="round-track--panel"
+                hideCaption
+              />
+            </div>
+          )}
+          <div className="round-summary-panel__schedule">
+            {rest.length > 0 ? (
+              <>
+                <span className="round-summary-panel__list-label">Después</span>
+                <ul className="round-summary-panel__list">
+                  {rest.map((item, idx) => (
+                    <li
+                      key={`${item.label}-${idx}`}
+                      className={["round-summary-panel__item", `round-summary-panel__item--${item.kind}`]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      <span className="round-summary-panel__item-icon" aria-hidden>
+                        {kindIcon(item.kind)}
+                      </span>
+                      <div className="round-summary-panel__item-body">
+                        <span className="round-summary-panel__item-label">{item.label}</span>
+                        <time className="round-summary-panel__item-time">{item.time}</time>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="round-summary-panel__empty">
+                {primary
+                  ? "Se mostrará el siguiente bloque cuando concluya este hito."
+                  : "No hay hitos programados para las próximas rondas."}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  },
+  (prev, next) => {
+    const trackEqual =
+      (prev.track === null && next.track === null) ||
+      (prev.track !== null &&
+        next.track !== null &&
+        prev.track.total === next.track.total &&
+        prev.track.current === next.track.current &&
+        prev.track.completed === next.track.completed);
+
+    const scheduleEqual =
+      prev.schedule.length === next.schedule.length &&
+      prev.schedule.every((item, idx) => {
+        const other = next.schedule[idx];
+        return !!other && item.label === other.label && item.time === other.time && item.kind === other.kind;
+      });
+
+    return (
+      trackEqual &&
+      scheduleEqual &&
+      prev.isLight === next.isLight &&
+      prev.density === next.density &&
+      prev.accent === next.accent &&
+      prev.stateLabel === next.stateLabel
+    );
+  }
 );
 
 interface ProgressPanelProps {
@@ -1252,11 +1408,10 @@ const Display: React.FC = () => {
       : "flex flex-col gap-[0.82rem]";
   const hasTrack = !!trackData;
   const hasSchedule = schedule.length > 0;
-  const infoDeckClass = [
-    "hud-info-grid",
-    density === "compact" ? "hud-info-grid--compact" : "",
-    density === "expanded" ? "hud-info-grid--expanded" : "",
-    hasTrack && hasSchedule ? "" : "hud-info-grid--single",
+  const sideStackClass = [
+    "hud-side-stack",
+    density === "compact" ? "hud-side-stack--compact" : "",
+    density === "expanded" ? "hud-side-stack--expanded" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1456,91 +1611,35 @@ const Display: React.FC = () => {
                 </div>
               </div>
 
-              {active && (
-              <ProgressPanel
-                isLight={!!isLight}
-                accent={accent}
-                displayPct={displayPct}
-                transitionClass={transitionClass}
-                stateLabel={stateLabel}
-                nextEvent={nextEvent}
-                remaining={remaining}
-                mode={active.timer.mode ?? null}
-                currentRound={trackData?.current ?? null}
-                roundMinutes={active.roundMinutes}
-                breakMinutes={active.breakMinutes}
-                breakEnabled={active.breakEnabled}
-                density={density}
-                fxDisabled={disableFX}
-              />
-            )}
+              <div className={sideStackClass}>
+                <ProgressPanel
+                  isLight={!!isLight}
+                  accent={accent}
+                  displayPct={displayPct}
+                  transitionClass={transitionClass}
+                  stateLabel={stateLabel}
+                  nextEvent={nextEvent}
+                  remaining={remaining}
+                  mode={active.timer.mode ?? null}
+                  currentRound={trackData?.current ?? null}
+                  roundMinutes={active.roundMinutes}
+                  breakMinutes={active.breakMinutes}
+                  breakEnabled={active.breakEnabled}
+                  density={density}
+                  fxDisabled={disableFX}
+                />
 
-              {(hasTrack || hasSchedule) && (
-                <div className={infoDeckClass}>
-                  {hasTrack && (
-                    <div className="hud-info-grid__cell hud-info-grid__cell--timeline">
-                      <RoundTrack
-                        total={trackData!.total}
-                        completed={trackData!.completed}
-                        current={trackData!.current}
-                        isLight={!!isLight}
-                        accent={trackAccent}
-                        stateLabel={stateLabel}
-                        density={density}
-                      />
-                    </div>
-                  )}
-
-                  {hasSchedule && (
-                    <div className="hud-info-grid__cell hud-info-grid__cell--schedule">
-                      <div
-                        className={[
-                          "schedule-card",
-                          "schedule-card--hud",
-                          density === "compact" ? "schedule-card--compact" : "",
-                          density === "expanded" ? "schedule-card--expanded" : "",
-                          schedule.length <= 2 ? "schedule-card--tight" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      >
-                        <div className="schedule-card__header">
-                          <span className="schedule-card__subtitle">Próximos hitos</span>
-                          <span className="schedule-card__hint">Se sincroniza al cerrar cada fase</span>
-                        </div>
-                        <div className="schedule-card__list">
-                          {schedule.map((it, i) => (
-                            <div
-                              key={i}
-                              className={[
-                                "schedule-chip",
-                                i === 0 ? "schedule-chip--active" : "",
-                                `schedule-chip--${it.kind}`,
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                            >
-                              <span className="schedule-chip__icon">
-                                {it.kind === "break" ? (
-                                  <IconCoffee className="size-4" />
-                                ) : it.kind === "final" ? (
-                                  <IconTrophy className="size-4" />
-                                ) : (
-                                  <IconFlag className="size-4" />
-                                )}
-                              </span>
-                              <div className="schedule-chip__content">
-                                <span className="schedule-chip__label">{it.label}</span>
-                                <span className="schedule-chip__time">{it.time}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                {(hasTrack || hasSchedule) && (
+                  <RoundSummaryPanel
+                    track={trackData}
+                    schedule={schedule}
+                    isLight={!!isLight}
+                    density={density}
+                    accent={trackAccent}
+                    stateLabel={stateLabel}
+                  />
+                )}
+              </div>
             </div>
           </section>
         )}
