@@ -179,29 +179,69 @@ const computeETAClock = (t: Tournament, tf: TimeFmt, nowMs?: number) => {
   return dayjs((nowMs ?? Date.now()) + ms).format(fmtClock(tf));
 };
 
-const computeSchedule = (t: Tournament, tf: TimeFmt, nowMs?: number) => {
-  const items: { label: string; time: string }[] = [];
+type ScheduleItem = { label: string; time: string; type: 'round' | 'break' };
+
+const computeSchedule = (t: Tournament, tf: TimeFmt, nowMs?: number, limit?: number): ScheduleItem[] => {
+  const items: ScheduleItem[] = [];
   let base = nowMs ?? Date.now();
-  const { inRound, currentIndex } = computeRoundsInfo(t);
-  const remainingMs = (t.timer.target && (t.timer.running || t.timer.remainingMs > 0))
+  const { inBreak } = computeRoundsInfo(t);
+
+  const timerActive = t.timer.target !== null && (t.timer.running || t.timer.remainingMs > 0);
+  const remainingMs = timerActive
     ? (nowMs !== undefined ? getRemainingMs(t, nowMs) : t.timer.remainingMs)
     : 0;
-  if (remainingMs > 0) {
-    items.push({
-      label: t.timer.mode === 'break' ? 'Fin del descanso' : `Fin ronda ${inRound ? currentIndex : currentIndex + 1}`,
-      time: dayjs(base + remainingMs).format(fmtClock(tf)),
-    });
+
+  const push = (deltaMs: number, label: string, type: 'round' | 'break') => {
+    base += deltaMs;
+    items.push({ label, time: dayjs(base).format(fmtClock(tf)), type });
+    return typeof limit === 'number' && items.length >= limit;
+  };
+
+  if (timerActive && remainingMs > 0) {
+    const label = t.timer.mode === 'break'
+      ? `Fin descanso ${Math.max(t.roundsCompleted, 1)}`
+      : `Fin ronda ${t.roundsCompleted + 1}`;
+    const type: 'round' | 'break' = t.timer.mode === 'break' ? 'break' : 'round';
     base += remainingMs;
+    items.push({ label, time: dayjs(base).format(fmtClock(tf)), type });
   }
-  const left = Math.max(0, t.roundsTotal - (inRound ? currentIndex : currentIndex));
-  for (let i = 1; i <= left; i++) {
-    if (t.breakEnabled && t.breakMinutes > 0) {
-      base += t.breakMinutes * 60_000;
-      items.push({ label: `Descanso`, time: dayjs(base).format(fmtClock(tf)) });
+
+  let roundsFinished = t.roundsCompleted;
+  let nextRoundIndex = roundsFinished + 1;
+
+  if (timerActive && remainingMs > 0 && t.timer.mode === 'round') {
+    nextRoundIndex = roundsFinished + 2;
+  }
+
+  for (let idx = nextRoundIndex; idx <= t.roundsTotal; idx++) {
+    const shouldInsertBreak = t.breakEnabled && t.breakMinutes > 0 && (timerActive || roundsFinished > 0 || idx > 1 || inBreak);
+    if (shouldInsertBreak) {
+      if (push(t.breakMinutes * 60_000, `Fin descanso ${Math.max(idx - 1, 1)}`, 'break')) {
+        return typeof limit === 'number' ? items.slice(0, limit) : items;
+      }
     }
-    base += t.roundMinutes * 60_000; items.push({ label: `Fin ronda ${currentIndex + i}`, time: dayjs(base).format(fmtClock(tf)) });
+
+    const minutes = (idx === roundsFinished + 1 && t.nextRoundMinutes && t.nextRoundMinutes > 0)
+      ? t.nextRoundMinutes
+      : t.roundMinutes;
+    if (push(minutes * 60_000, `Fin ronda ${idx}`, 'round')) {
+      return typeof limit === 'number' ? items.slice(0, limit) : items;
+    }
+    roundsFinished = idx;
   }
-  return items.slice(0, 3);
+
+  return typeof limit === 'number' ? items.slice(0, limit) : items;
+};
+
+const getStatusLabel = (t: Tournament, nowMs?: number) => {
+  const remaining = t.timer.target !== null
+    ? (nowMs !== undefined ? getRemainingMs(t, nowMs) : t.timer.remainingMs)
+    : 0;
+  const expired = !t.timer.running && t.timer.target !== null && remaining <= 0;
+  if (expired) return 'Terminado';
+  if (t.timer.running) return t.timer.mode === 'break' ? 'Descanso' : 'En curso';
+  if (t.timer.target) return 'Pausado';
+  return 'Sin iniciar';
 };
 
 /* ====================== Comunes UI ====================== */
@@ -388,11 +428,9 @@ type HeaderHUDProps = {
   tournaments: Tournament[];
   runningCount: number;
   anyRunning: boolean;
-  onPauseAll: ()=>void;
-  onResumeAll: ()=>void;
   onResetAll: ()=>void;
   onNew: ()=>void;
-  onCopySchedule: ()=>void;
+  onShowItinerary: ()=>void;
   onExport: ()=>void;
   onOpenSettings: ()=>void;
   fileInputRef: React.RefObject<HTMLInputElement>;
@@ -403,11 +441,36 @@ type HeaderHUDProps = {
 
 const HeaderHUD: React.FC<HeaderHUDProps> = ({
   now: nowLabel, nowMs, user, onLock, onLogout, settings, setSettings, tournaments, runningCount, anyRunning,
-  onPauseAll, onResumeAll, onResetAll, onNew, onCopySchedule, onExport, onOpenSettings,
+  onResetAll, onNew, onShowItinerary, onExport, onOpenSettings,
   fileInputRef, importJSON, AnnouncementBtn, pushToast
 }) => {
   const total = tournaments.length;
   const simpleMode = settings.panelMode === 'simple';
+
+  const toolsAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const toolsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const handleDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (toolsMenuRef.current?.contains(target)) return;
+      if (toolsAnchorRef.current?.contains(target)) return;
+      setToolsOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setToolsOpen(false);
+    };
+    document.addEventListener('mousedown', handleDown);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleDown);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [toolsOpen]);
+
+  const closeTools = () => setToolsOpen(false);
 
   const nextEventClock = useMemo(() => {
     const ts = tournaments
@@ -458,16 +521,14 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
 
               <div className="d-flex flex-wrap gap-2">
                 <button className="btn btn-sm btn-primary" onClick={onNew}>➕ Nuevo</button>
-                <button className="btn btn-sm btn-outline-warning" onClick={onPauseAll}>⏸ Pausar</button>
-                <button className="btn btn-sm btn-outline-success" onClick={onResumeAll}>▶ Reanudar</button>
-                <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll}>↺ Reset</button>
+                <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll}>↺ Reiniciar todos</button>
                 <button className="btn btn-sm btn-outline-info" onClick={onOpenSettings}>⚙️ Ajustes</button>
               </div>
 
               <details className="simple-panel__details">
                 <summary>Más herramientas</summary>
                 <div className="pt-2 d-flex flex-wrap gap-2">
-                  <button className="btn btn-sm btn-outline-light" onClick={onCopySchedule}>📋 Itinerario</button>
+                  <button className="btn btn-sm btn-outline-light" onClick={onShowItinerary}>📋 Itinerario</button>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -601,33 +662,70 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
               </div>
             </div>
 
-            {/* Acciones rápidas */}
-            <div className="vr d-none d-md-block"/>
-            <div className="d-flex flex-wrap gap-2">
-              <button className="btn btn-sm btn-outline-warning" onClick={onPauseAll} title="Pausar todos (P / Space)">⏸ Pausar</button>
-              <button className="btn btn-sm btn-outline-success" onClick={onResumeAll} title="Reanudar todos (R / Space)">▶ Reanudar</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll} title="Resetear todos">↺ Reset</button>
-              <button className="btn btn-sm btn-primary" onClick={onNew} title="Nuevo (N)">➕ Nuevo</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={onCopySchedule} title="Copiar itinerario">📋 Itinerario</button>
+            <div className="ms-auto d-flex flex-wrap align-items-center gap-2">
+              <button className="btn btn-sm btn-primary" onClick={onNew} title="Nuevo torneo (N)">➕ Nuevo torneo</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll} title="Reiniciar todos">↺ Reiniciar todos</button>
 
-              {/* Importar/Exportar/Ajustes/Anuncio */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/json"
-                hidden
-                onChange={e=>{
-                  const f=e.target.files?.[0];
-                  if(f) importJSON(f);
-                  if(fileInputRef.current) fileInputRef.current.value='';
-                }}
-              />
-              <button className="btn btn-sm btn-outline-light" onClick={()=>fileInputRef.current?.click()}>📥 Importar</button>
-              <button className="btn btn-sm btn-outline-light" onClick={onExport}>📤 Exportar</button>
-              <button className="btn btn-sm btn-outline-info" onClick={onOpenSettings} title="Ajustes (S)">⚙️ Ajustes</button>
-              <AnnouncementBtn pushToast={pushToast as any}/>
+              <div className="position-relative">
+                <button
+                  ref={toolsAnchorRef}
+                  className={`btn btn-sm ${toolsOpen ? 'btn-light text-dark' : 'btn-outline-light'}`}
+                  onClick={() => setToolsOpen(open => !open)}
+                  aria-expanded={toolsOpen}
+                  aria-haspopup="true"
+                >
+                  🧰 Herramientas
+                </button>
+                {toolsOpen && (
+                  <div
+                    ref={toolsMenuRef}
+                    className="shadow-lg"
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 6px)',
+                      minWidth: 240,
+                      borderRadius: 12,
+                      background: 'rgba(13,17,25,0.97)',
+                      border: '1px solid rgba(255,255,255,.08)',
+                      zIndex: 2000
+                    }}
+                  >
+                    <div className="p-3 d-flex flex-column gap-2">
+                      <button className="btn btn-sm btn-outline-light text-start" onClick={() => { closeTools(); onShowItinerary(); }}>
+                        📋 Ver itinerario
+                      </button>
+                      <button className="btn btn-sm btn-outline-light text-start" onClick={() => { closeTools(); onExport(); }}>
+                        📤 Exportar torneos
+                      </button>
+                      <button className="btn btn-sm btn-outline-light text-start" onClick={() => { closeTools(); fileInputRef.current?.click(); }}>
+                        📥 Importar torneos
+                      </button>
+                      <button className="btn btn-sm btn-outline-light text-start" onClick={() => { closeTools(); onOpenSettings(); }}>
+                        ⚙️ Ajustes del panel
+                      </button>
+                      <div onClick={closeTools} className="d-grid">
+                        <AnnouncementBtn pushToast={pushToast as any} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button className="btn btn-sm btn-outline-secondary" onClick={togglePanelMode} title="Cambiar a modo simple">Modo simple</button>
             </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              hidden
+              onChange={e=>{
+                const f=e.target.files?.[0];
+                if(f) importJSON(f);
+                if(fileInputRef.current) fileInputRef.current.value='';
+              }}
+            />
 
             {/* Métricas (responsive) */}
             <div className="ms-auto d-flex d-xl-none align-items-center gap-3">
@@ -919,22 +1017,40 @@ export const MasterPanel: React.FC = () => {
 
   const runningCount = tournaments.filter(t => t.timer.running).length;
 
-  // Copiar schedule (usar nowMs para precisión)
-  const copySchedule = () => {
+  const [itineraryOpen, setItineraryOpen] = useState(false);
+
+  const itineraryData = useMemo(() => tournaments.map(t => ({
+    tournament: t,
+    status: getStatusLabel(t, nowMs),
+    schedule: computeSchedule(t, settings.timeFmt, nowMs, undefined),
+    eta: computeETAClock(t, settings.timeFmt, nowMs),
+  })), [tournaments, settings.timeFmt, nowMs]);
+
+  const copyItinerary = useCallback(() => {
     try {
+      if (!itineraryData.length) {
+        pushToast({ kind: 'secondary', text: 'Nada que copiar' });
+        return;
+      }
       const lines: string[] = [];
-      tournaments.forEach(t => {
-        const sch = computeSchedule(t, settings.timeFmt, nowMs);
-        if (sch.length) {
-          lines.push(`${t.name}:`);
-          sch.forEach(s => lines.push(`  • ${s.label}: ${s.time}`));
+      itineraryData.forEach(({ tournament: t, status, schedule, eta }) => {
+        const etaLabel = eta && eta !== '-' ? ` · ETA ${eta}` : '';
+        lines.push(`${t.name} — ${status}${etaLabel}`);
+        if (!schedule.length) {
+          lines.push('  • Sin eventos programados');
+        } else {
+          schedule.forEach(s => lines.push(`  • ${s.label}: ${s.time}`));
         }
       });
-      if (!lines.length) { pushToast({kind:'secondary', text:'Nada que copiar'}); return; }
       navigator.clipboard.writeText(lines.join('\n'));
-      pushToast({kind:'success', text:'📋 Itinerario copiado'});
-    } catch { pushToast({kind:'warning', text:'Error al copiar'}); }
-  };
+      pushToast({ kind: 'success', text: '📋 Itinerario copiado' });
+    } catch {
+      pushToast({ kind: 'warning', text: 'Error al copiar' });
+    }
+  }, [itineraryData, pushToast]);
+
+  const openItinerary = useCallback(() => setItineraryOpen(true), []);
+  const closeItinerary = useCallback(() => setItineraryOpen(false), []);
 
   const showAdvanced = settings.panelMode === 'advanced';
   const effectiveCols = showAdvanced ? settings.cols : 1;
@@ -1007,11 +1123,9 @@ export const MasterPanel: React.FC = () => {
         tournaments={tournaments}
         runningCount={runningCount}
         anyRunning={anyRunning}
-        onPauseAll={pauseAll}
-        onResumeAll={resumeAll}
         onResetAll={resetAll}
         onNew={openCreate}
-        onCopySchedule={copySchedule}
+        onShowItinerary={openItinerary}
         onExport={exportJSON}
         onOpenSettings={()=>setSettingsOpen(true)}
         fileInputRef={fileInputRef}
@@ -1071,6 +1185,7 @@ export const MasterPanel: React.FC = () => {
       <TournamentOffcanvas open={canvasOpen} onClose={closeCanvas} onSubmit={submitCanvas} initial={canvasInitial} />
       <SettingsOffcanvas open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={settings} onChange={(s)=>{ setSettings(s); setSettingsOpen(false); }} />
       <PanelToastHost position="top-right" />
+      <ItineraryDialog open={itineraryOpen} onClose={closeItinerary} onCopy={copyItinerary} data={itineraryData} timeFmt={settings.timeFmt} />
       <AnnouncementConfigurator />
     </>
   );
@@ -1108,9 +1223,9 @@ const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt
   const { inRound, currentIndex, roundsLeftAfterCurrent } = useMemo(() => computeRoundsInfo(t), [t]);
   const remainingMs = getRemainingMs(t, nowMs);
   const expired = !t.timer.running && t.timer.target !== null && remainingMs <= 0;
-  const status = expired ? 'Terminado' : t.timer.running ? 'En curso' : t.timer.target ? 'Pausado' : 'Sin iniciar';
+  const status = getStatusLabel(t, nowMs);
   const colorCss = COLOR[gameColorKey(t.game)];
-  const schedule = computeSchedule(t, timeFmt, nowMs);
+  const schedule = computeSchedule(t, timeFmt, nowMs, 3);
   const totalSecs = Math.max(0, Math.floor(remainingMs / 1000));
   const phaseTotalSecs = t.timer.mode === 'break' ? (t.breakMinutes * 60) : (t.roundMinutes * 60);
   const progress = phaseTotalSecs > 0 ? Math.min(100, Math.max(0, 100 - Math.round((totalSecs / phaseTotalSecs) * 100))) : 0;
@@ -1136,6 +1251,67 @@ const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt
       </header>
 
       <div className="card-body d-flex flex-column gap-3">
+        <div className="d-flex flex-column gap-2">
+          <div className="d-flex flex-wrap gap-2">
+            {t.timer.running ? (
+              <button className="btn btn-sm btn-warning px-3" onClick={pause}>⏸ Pausar</button>
+            ) : !t.timer.running && t.timer.target !== null && remainingMs > 0 ? (
+              <>
+                <button className="btn btn-sm btn-success px-3" onClick={resume}>▶ Reanudar</button>
+                <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-sm btn-primary px-3" onClick={()=>startRound()}>▶ Iniciar</button>
+                {t.breakEnabled && t.breakMinutes > 0 && (
+                  <button className="btn btn-sm btn-outline-light px-3" onClick={startBreak}>☕ Descanso</button>
+                )}
+                {expired && (
+                  <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
+                )}
+              </>
+            )}
+          </div>
+          <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <div className="d-flex flex-wrap gap-2 align-items-center">
+              {t.timer.running && (
+                <div className="btn-group btn-group-sm" role="group" aria-label="Ajustar tiempo restante">
+                  <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
+                  <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
+                  <button className="btn btn-outline-light" onClick={add1}>+1m</button>
+                  <button className="btn btn-outline-light" onClick={add5}>+5m</button>
+                </div>
+              )}
+              {t.timer.mode === 'break' && (t.timer.running || (!t.timer.running && remainingMs > 0)) && (
+                <button className="btn btn-sm btn-outline-light px-3" onClick={skipBreak}>⏭ Omitir descanso</button>
+              )}
+            </div>
+            <div className="d-flex flex-wrap gap-2">
+              <button className="btn btn-sm btn-outline-light" onClick={restartRound}>⟲ Reiniciar</button>
+              <button className="btn btn-sm btn-outline-light" onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
+              <button className="btn btn-sm btn-outline-light" onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
+              <button className="btn btn-sm btn-outline-light" onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => {
+                  const inp = prompt('Minutos nuevos (reemplaza el timer actual):');
+                  if (!inp) return;
+                  const v = Number(inp);
+                  if (!Number.isFinite(v) || v <= 0) return;
+                  startRound(v, `${v}m manual`);
+                }}
+              >✎ Set</button>
+            </div>
+          </div>
+          {!t.timer.running && t.timer.target === null && (
+            <div className="d-flex flex-wrap gap-1">
+              {quickMinutes.map(m => (
+                <button key={m} className="btn btn-sm btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <input aria-label="Nombre del torneo" className="form-control form-control-sm fw-semibold" value={t.name} onChange={e=>onChange({ name: e.target.value })} />
 
         <div className="d-flex flex-wrap align-items-start gap-3">
@@ -1160,9 +1336,9 @@ const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt
         </div>
 
         {schedule.length > 0 && (
-          <div className="d-flex flex-wrap gap-2">
+          <div className="d-flex flex-wrap gap-2 small">
             {schedule.map((it, i) => (
-              <span key={i} className="badge text-bg-secondary">
+              <span key={i} className="badge text-bg-secondary text-wrap">
                 <span className="me-1">{it.label}:</span>
                 <strong>{it.time}</strong>
               </span>
@@ -1170,40 +1346,8 @@ const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt
           </div>
         )}
 
-        <div className="d-flex flex-wrap gap-2">
-          {t.timer.running ? (
-            <>
-              <button className="btn btn-sm btn-warning px-3" onClick={pause}>⏸ Pausar</button>
-              <div className="btn-group btn-group-sm" role="group">
-                <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
-                <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
-                <button className="btn btn-outline-light" onClick={add1}>+1m</button>
-                <button className="btn btn-outline-light" onClick={add5}>+5m</button>
-              </div>
-            </>
-          ) : !t.timer.running && t.timer.target !== null && remainingMs > 0 ? (
-            <>
-              <button className="btn btn-sm btn-success px-3" onClick={resume}>▶ Reanudar</button>
-              <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
-            </>
-          ) : (
-            <>
-              <button className="btn btn-sm btn-primary px-3" onClick={()=>startRound()}>▶ Iniciar</button>
-              {t.breakEnabled && t.breakMinutes > 0 && (
-                <button className="btn btn-sm btn-outline-light px-3" onClick={startBreak}>☕ Descanso</button>
-              )}
-              {expired && (
-                <button className="btn btn-sm btn-outline-light px-3" onClick={reset}>↺ Reset</button>
-              )}
-            </>
-          )}
-          {t.timer.mode === 'break' && t.timer.running && (
-            <button className="btn btn-sm btn-outline-light px-3" onClick={skipBreak}>⏭ Omitir descanso</button>
-          )}
-        </div>
-
         <details className="simple-panel__details mt-1">
-          <summary>Controles avanzados</summary>
+          <summary>Configuración y notas</summary>
           <div className="pt-2 d-flex flex-column gap-3">
             <div className="row g-2">
               <div className="col-6">
@@ -1250,19 +1394,6 @@ const SimpleTournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt
               </select>
             </div>
 
-            <div className="d-flex flex-wrap gap-1">
-              {quickMinutes.map(m => (
-                <button key={m} className="btn btn-sm btn-outline-light" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
-              ))}
-            </div>
-
-            <div className="d-flex flex-wrap gap-2">
-              <button className="btn btn-sm btn-outline-secondary" onClick={restartRound}>⟲ Reiniciar</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
-            </div>
-
             <div>
               <label className="form-label small mb-1" htmlFor={`simple-notes-${t.id}`}>Notas</label>
               <textarea id={`simple-notes-${t.id}`} className="form-control form-control-sm" rows={2} maxLength={2000} value={t.notes || ''} placeholder="Notas del organizador..." onChange={e=>onChange({notes: e.target.value})}></textarea>
@@ -1278,7 +1409,7 @@ const TournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, comp
   const { inRound, currentIndex, roundsLeftAfterCurrent } = useMemo(() => computeRoundsInfo(t), [t]);
   const remainingMs = getRemainingMs(t, nowMs);
   const expired = !t.timer.running && t.timer.target !== null && remainingMs <= 0;
-  const sch = computeSchedule(t, timeFmt, nowMs);
+  const sch = computeSchedule(t, timeFmt, nowMs, 4);
   const colorCss = COLOR[gameColorKey(t.game)];
   const totalSecs = Math.max(0, Math.floor(remainingMs / 1000));
   const phaseTotalSecs = t.timer.mode === 'break' ? (t.breakMinutes * 60) : (t.roundMinutes * 60);
@@ -1315,13 +1446,69 @@ const TournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, comp
       </header>
 
       <div className="card-body d-flex flex-column gap-3">
+        <div className="d-flex flex-column gap-2">
+          <div className="d-flex flex-wrap gap-2">
+            {(!t.timer.running && t.timer.target === null) ? (
+              <>
+                <button className={`${mainBtn} btn-primary px-4`} onClick={()=>startRound()}>▶ Iniciar</button>
+                {t.breakEnabled && t.breakMinutes>0 && (
+                  <button className={`${mainBtn} btn-outline-light px-4`} onClick={startBreak}>☕ Descanso</button>
+                )}
+              </>
+            ) : t.timer.running ? (
+              <button className={`${mainBtn} btn-warning px-4`} onClick={pause}>⏸ Pausar</button>
+            ) : (
+              <>
+                <button className={`${mainBtn} btn-success px-4`} onClick={resume}>▶ Reanudar</button>
+                <button className={`${mainBtn} btn-outline-light px-4`} onClick={reset}>↺ Reset</button>
+              </>
+            )}
+          </div>
+          {t.timer.running && (
+            <div className="btn-group btn-group-sm" role="group" aria-label="Ajustar tiempo restante">
+              <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
+              <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
+              <button className="btn btn-outline-light" onClick={add1}>+1m</button>
+              <button className="btn btn-outline-light" onClick={add5}>+5m</button>
+            </div>
+          )}
+          {!t.timer.running && t.timer.target === null && (
+            <div className="d-flex flex-wrap gap-1">
+              {[30,40,45,50,60].map(m=> (
+                <button key={m} className={`${smallBtn} btn-outline-secondary`} onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
+              ))}
+            </div>
+          )}
+          <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            {t.timer.mode==='break' && (t.timer.running || (!t.timer.running && remainingMs > 0)) && (
+              <button className={`${mainBtn} btn-secondary px-4`} onClick={skipBreak}>⏭ Omitir descanso</button>
+            )}
+            <div className="d-flex flex-wrap gap-2">
+              <button className={`${smallBtn} btn-outline-light`} onClick={restartRound}>⟲ Reiniciar</button>
+              <button className={`${smallBtn} btn-outline-light`} onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
+              <button className={`${smallBtn} btn-outline-light`} onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
+              <button className={`${smallBtn} btn-outline-light`} onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
+              <button
+                className={`${smallBtn} btn-outline-secondary`}
+                onClick={() => {
+                  const inp = prompt('Minutos nuevos (reemplaza el timer actual):');
+                  if (!inp) return;
+                  const v = Number(inp);
+                  if (!Number.isFinite(v) || v<=0) return;
+                  startRound(v, `${v}m manual`);
+                }}
+              >✎ Set</button>
+            </div>
+          </div>
+        </div>
+
         <input aria-label="Nombre del torneo" className={nameInputClass} value={t.name} onChange={e=>onChange({ name: e.target.value })} />
 
         {/* Stats */}
         <div className="row g-2 align-items-end">
           <div className={colStat}>
             <div className="text-secondary small">Estado</div>
-            <div className="fw-bold text-info text-truncate">{expired ? 'Terminado' : t.timer.running ? 'En curso' : t.timer.target ? 'Pausado' : 'Sin iniciar'}</div>
+            <div className="fw-bold text-info text-truncate">{status}</div>
             <div className="text-secondary small">{dayjs().format(timeFmt==='12'?'hh:mm:ss A':'HH:mm:ss')}</div>
           </div>
           <div className={colStat}>
@@ -1404,7 +1591,7 @@ const TournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, comp
 
         {/* Próximos hitos */}
         {sch.length > 0 && (
-          <div className="d-flex flex-wrap gap-2 align-items-center">
+          <div className="d-flex flex-wrap gap-2 align-items-center small">
             {sch.map((it, i)=> (
               <span key={i} className="badge text-bg-dark border"><span className="me-1">{it.label}:</span><strong>{it.time}</strong></span>
             ))}
@@ -1416,72 +1603,6 @@ const TournamentCard: React.FC<TournamentCardProps> = ({ t, nowMs, timeFmt, comp
           <summary className="small text-secondary pointer">📝 Notas</summary>
           <textarea className="form-control mt-1" rows={3} maxLength={2000} value={t.notes || ''} placeholder="Notas del organizador..." onChange={e=>onChange({notes: e.target.value})}></textarea>
         </details>
-
-        {/* ===== Controles prioritarios en GRANDE ===== */}
-        <div className="mt-auto d-flex flex-column gap-2">
-          {/* Estado: sin iniciar */}
-          {(!t.timer.running && t.timer.target === null) && (
-            <>
-              <div className="d-flex flex-wrap gap-2">
-                <button className={`${mainBtn} btn-primary px-4`} onClick={()=>startRound()}>▶ Iniciar</button>
-                {t.breakEnabled && t.breakMinutes>0 && (
-                  <button className={`${mainBtn} btn-outline-light px-4`} onClick={startBreak}>☕ Descanso</button>
-                )}
-              </div>
-              <div className="d-flex flex-wrap gap-1">
-                <div className="btn-group btn-group-sm" role="group" aria-label="Rápido">
-                  {[30,40,45,50,60].map(m=> (
-                    <button key={m} className="btn btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Estado: corriendo */}
-          {t.timer.running && (
-            <>
-              <div className="d-flex flex-wrap gap-2">
-                <button className={`${mainBtn} btn-warning px-4`} onClick={pause}>⏸ Pausar</button>
-              </div>
-              <div className="btn-group btn-group-sm" role="group">
-                <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
-                <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
-                <button className="btn btn-outline-light" onClick={add1}>+1m</button>
-                <button className="btn btn-outline-light" onClick={add5}>+5m</button>
-              </div>
-            </>
-          )}
-
-          {/* Estado: pausado */}
-          {!t.timer.running && t.timer.target !== null && remainingMs > 0 && (
-            <div className="d-flex flex-wrap gap-2">
-              <button className={`${mainBtn} btn-success px-4`} onClick={resume}>▶ Reanudar</button>
-              <button className={`${mainBtn} btn-outline-light px-4`} onClick={reset}>↺ Reset</button>
-            </div>
-          )}
-
-          {/* En break */}
-          {t.timer.mode==='break' && (
-            <div className="d-flex flex-wrap gap-2">
-              <button className={`${mainBtn} btn-secondary px-4`} onClick={skipBreak}>⏭ Omitir descanso</button>
-            </div>
-          )}
-
-          {/* Acciones secundarias */}
-          <div className="d-flex flex-wrap gap-2 justify-content-end">
-            <button className={`${smallBtn} btn-outline-light`} onClick={restartRound}>⟲ Reiniciar</button>
-            <button className={`${smallBtn} btn-secondary`} onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
-            <button className={`${smallBtn} btn-secondary`} onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
-            <button className={`${smallBtn} btn-dark border`} onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
-            <button className={`${smallBtn} btn-outline-secondary`} onClick={()=>{
-              const inp = prompt('Minutos nuevos (reemplaza el timer actual):');
-              if (!inp) return; const v = Number(inp);
-              if (!Number.isFinite(v) || v<=0) return;
-              startRound(v, v+ 'm manual');
-            }}>✎ Set</button>
-          </div>
-        </div>
       </div>
     </article>
   );
@@ -1493,6 +1614,127 @@ export const App: React.FC = () => (
     <MasterPanel />
   </ErrorBoundary>
 );
+
+type ItineraryEntry = {
+  tournament: Tournament;
+  status: string;
+  schedule: ScheduleItem[];
+  eta: string;
+};
+
+const statusBadgeClass = (status: string) => {
+  if (status === 'En curso') return 'text-bg-success';
+  if (status === 'Descanso') return 'text-bg-info';
+  if (status === 'Pausado') return 'text-bg-warning';
+  if (status === 'Terminado') return 'text-bg-secondary';
+  return 'text-bg-dark';
+};
+
+const ItineraryDialog: React.FC<{
+  open: boolean;
+  onClose: () => void;
+  onCopy: () => void;
+  data: ItineraryEntry[];
+  timeFmt: TimeFmt;
+}> = ({ open, onClose, onCopy, data, timeFmt }) => {
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Itinerario estimado de torneos"
+      style={{ position: 'fixed', inset: 0, zIndex: 2600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}
+      />
+      <div
+        className="shadow-lg"
+        style={{
+          position: 'relative',
+          width: 'min(960px, 92vw)',
+          maxHeight: '90vh',
+          borderRadius: 16,
+          overflow: 'hidden',
+          background: '#10141d',
+          border: '1px solid rgba(255,255,255,.08)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        <div className="px-4 py-3 border-bottom border-secondary-subtle d-flex align-items-start gap-3">
+          <div>
+            <h5 className="m-0">Itinerario estimado</h5>
+            <small className="text-secondary">Formato horario: {timeFmt === '12' ? '12 horas' : '24 horas'}.</small>
+          </div>
+          <div className="ms-auto d-flex flex-wrap gap-2">
+            <button className="btn btn-sm btn-outline-light" onClick={onCopy}>📄 Copiar</button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+        <div className="px-4 py-3 overflow-auto" style={{ maxHeight: 'calc(90vh - 118px)' }}>
+          {data.length === 0 ? (
+            <p className="text-secondary fst-italic">No hay torneos registrados.</p>
+          ) : (
+            data.map(({ tournament: t, status, schedule, eta }, index) => (
+              <section key={t.id} className={index === data.length - 1 ? '' : 'pb-4 mb-4 border-bottom border-secondary-subtle'}>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <strong className="fs-6 text-truncate" style={{ maxWidth: '60%' }}>{t.name}</strong>
+                  <span className="badge text-bg-dark">{t.game}</span>
+                  <span className={`badge ${statusBadgeClass(status)}`}>{status}</span>
+                  <span className="badge text-bg-secondary">{t.roundsCompleted}/{t.roundsTotal} rondas</span>
+                  {eta && eta !== '-' && (
+                    <span className="badge text-bg-dark">ETA {eta}</span>
+                  )}
+                </div>
+                {schedule.length ? (
+                  <ul className="list-unstyled mt-3 mb-0 d-flex flex-column gap-2">
+                    {schedule.map((item, idx) => (
+                      <li
+                        key={idx}
+                        className="d-flex align-items-center justify-content-between gap-3"
+                        style={{
+                          borderRadius: 12,
+                          padding: '0.65rem 1rem',
+                          background: 'linear-gradient(120deg, rgba(148,163,184,0.16), rgba(30,41,59,0.22))',
+                          border: '1px solid rgba(255,255,255,0.06)'
+                        }}
+                      >
+                        <span className="d-flex align-items-center gap-2">
+                          <span aria-hidden>{item.type === 'break' ? '☕' : '🕒'}</span>
+                          <span>{item.label}</span>
+                        </span>
+                        <span className="fw-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>{item.time}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-secondary fst-italic mt-3 mb-0">
+                    Sin eventos programados. Configura rondas o inicia la cuenta regresiva para generar horarios.
+                  </p>
+                )}
+              </section>
+            ))
+          )}
+        </div>
+        <div className="px-4 py-2 border-top border-secondary-subtle text-secondary small">
+          Los horarios se calculan con la duración configurada de rondas y descansos a partir del estado actual de cada torneo.
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* =================== Anuncio avanzado =================== */
 interface AnnouncementDraft { text: string; kind: 'info'|'warn'|'success'; duration: number; color: string; sound: boolean; }

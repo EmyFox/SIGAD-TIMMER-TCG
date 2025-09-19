@@ -192,11 +192,9 @@ export const DisplayPreview: React.FC<{
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const overlayDragRef = useRef<{ startY: number; startH: number } | null>(null);
   const [overlayDragging, setOverlayDragging] = useState(false);
-  const [hudMenuFor, setHudMenuFor] = useState<string | null>(null);
-  const hudMenuRef = useRef<HTMLDivElement | null>(null);
-  const hudButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const toggleHudMenu = (id: string) => setHudMenuFor(prev => (prev === id ? null : id));
-  const closeHudMenu = () => setHudMenuFor(null);
+  const [configMenuFor, setConfigMenuFor] = useState<string | null>(null);
+  const toggleConfigMenu = (id: string) => setConfigMenuFor(prev => (prev === id ? null : id));
+  const closeConfigMenu = () => setConfigMenuFor(null);
   const onOverlayMove = (e: PointerEvent) => {
     if (!overlayDragRef.current || !expandedId) return;
     const dy = e.clientY - overlayDragRef.current.startY;
@@ -229,28 +227,12 @@ export const DisplayPreview: React.FC<{
   }, [expandedId]);
 
   useEffect(() => {
-    if (!hudMenuFor) {
-      hudMenuRef.current = null;
-      return;
-    }
-    const onPointer = (e: PointerEvent) => {
-      const menuEl = hudMenuRef.current;
-      const btnEl = hudButtonRefs.current[hudMenuFor];
-      const target = e.target as Node | null;
-      if (menuEl && menuEl.contains(target)) return;
-      if (btnEl && btnEl.contains(target)) return;
-      setHudMenuFor(null);
-    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setHudMenuFor(null);
+      if (e.key === 'Escape') closeConfigMenu();
     };
-    window.addEventListener('pointerdown', onPointer);
     window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('pointerdown', onPointer);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [hudMenuFor]);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /* ---------- Medición de ancho por tarjeta (ResizeObserver) ---------- */
   const [boxW, setBoxW] = useState<Record<string, number>>({});
@@ -374,9 +356,8 @@ export const DisplayPreview: React.FC<{
           const previewScalePct = Math.round(previewScale * 100);
 
           const { state, color, remainingFmt, phase } = stateInfo(t);
-          const wantsHudMenu = hudMenuFor === t.id;
-          const showHudMenuHere = wantsHudMenu && expandedId !== t.id;
-          const hudButtonActive = wantsHudMenu;
+          const configOpen = configMenuFor === t.id;
+          const showConfigHere = configOpen && expandedId !== t.id;
           const densityName = densityLabel(density);
           const fitLabel = fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ancho' : 'Alto';
 
@@ -384,180 +365,110 @@ export const DisplayPreview: React.FC<{
             <div key={t.id} className="card bg-body border-0 shadow-sm" style={{ overflow: 'visible' }}>
               {/* ===== Header con grupos ===== */}
               <div className="card-header bg-body border-0 py-2">
-                <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <strong className="text-truncate">{t.name}</strong>
-                  <span className="badge text-bg-secondary">{t.game}</span>
-
-                  <div className="ms-auto d-flex align-items-center flex-wrap gap-2">
-                    {/* Grupo 1: Ajuste + HUD + Expandir */}
-                    <div className="position-relative">
-                      <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste y HUD">
-                        <button
-                          className="btn btn-outline-light"
-                          onClick={() => cycleFit(t.id)}
-                        title={`Ajuste: ${fitLabel}`}
-                          aria-label="Cambiar modo de ajuste"
-                        >
-                          {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                          <span className="d-none d-md-inline ms-1">{fitLabel}</span>
-                        </button>
-                        <button
-                          className={hudButtonActive ? 'btn btn-light' : 'btn btn-outline-light'}
-                          onClick={() => toggleHudMenu(t.id)}
-                          ref={el => { hudButtonRefs.current[t.id] = el; }}
-                          title={`Zoom HUD: ${hudScale}% · ${densityName}`}
-                          aria-expanded={hudButtonActive}
-                          aria-controls={`hud-menu-${t.id}`}
-                        >
-                          {density === 'compact' ? '▣' : density === 'expanded' ? '▢' : '▤'}
-                          <span className="d-none d-md-inline ms-1">HUD</span>
-                        </button>
-                        <button className="btn btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">
-                          ⤢ <span className="d-none d-md-inline ms-1">Expandir</span>
-                        </button>
-                      </div>
-                      <div className="btn-group btn-group-sm ms-2" role="group" aria-label="Zoom del HUD">
-                        <button
-                          type="button"
-                          className="btn btn-outline-light"
-                          onClick={() => nudgeScale(t.id, -5)}
-                          title="Reducir zoom del HUD"
-                          aria-label="Reducir zoom del HUD"
-                        >
-                          −
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-light"
-                          onClick={() => nudgeScale(t.id, 5)}
-                          title="Ampliar zoom del HUD"
-                          aria-label="Ampliar zoom del HUD"
-                        >
-                          +
-                        </button>
-                      </div>
-                      {showHudMenuHere && (
-                        <div
-                          id={`hud-menu-${t.id}`}
-                          ref={el => { if (showHudMenuHere) hudMenuRef.current = el; }}
-                          className="hud-config-menu shadow"
-                          role="dialog"
-                          aria-label="Opciones de HUD"
-                        >
-                          <div className="hud-config-menu__section">
-                            <div className="hud-config-menu__label">Densidad</div>
-                            <div className="btn-group btn-group-sm w-100" role="group" aria-label="Modo de densidad">
-                              <button
-                                type="button"
-                                className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                                onClick={() => applyDensity(t.id, 'compact')}
-                              >
-                                Compacto
-                              </button>
-                              <button
-                                type="button"
-                                className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                                onClick={() => applyDensity(t.id, 'standard')}
-                              >
-                                Equilibrado
-                              </button>
-                              <button
-                                type="button"
-                                className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                                onClick={() => applyDensity(t.id, 'expanded')}
-                              >
-                                Amplio
-                              </button>
-                            </div>
-                          </div>
-                          <div className="hud-config-menu__section">
-                            <div className="hud-config-menu__label d-flex justify-content-between align-items-center">
-                              <span>Zoom del HUD</span>
-                              <span className="badge text-bg-secondary">{hudScale}%</span>
-                            </div>
-                            <input
-                              type="range"
-                              min={70}
-                              max={140}
-                              step={5}
-                              value={hudScale}
-                              onChange={e => updateScale(t.id, Number(e.target.value))}
-                              className="form-range hud-config-menu__slider"
-                              aria-label="Zoom del HUD"
-                            />
-                            <div className="d-flex justify-content-between text-muted small">
-                              <span>Menos zoom</span>
-                              <span>Más zoom</span>
-                            </div>
-                            <div className="d-flex flex-wrap gap-2 mt-2">
-                              {ZOOM_PRESETS.map(val => (
-                                <button
-                                  key={val}
-                                  type="button"
-                                  className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                                  onClick={() => updateScale(t.id, val)}
-                                >
-                                  {val}%
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-link p-0 small text-decoration-none"
-                            onClick={closeHudMenu}
-                          >
-                            Cerrar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                    {/* Grupo 2: Tema + FX */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Tema y efectos">
-                      <button
-                        className={(t.displayTheme || 'dark') === 'light' ? 'btn btn-warning' : 'btn btn-outline-warning'}
-                        onClick={() => onToggleTheme(t.id)}
-                        title="Alternar tema del display (claro/oscuro)"
-                      >
-                        {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
-                        <span className="d-none d-md-inline ms-1">Tema</span>
-                      </button>
-                      <button
-                        className={isFxOn(t.id) ? 'btn btn-outline-warning' : 'btn btn-warning'}
-                        onClick={() => toggleFx(t.id)}
-                        title={isFxOn(t.id) ? 'Desactivar efectos' : 'Activar efectos'}
-                      >
-                        {isFxOn(t.id) ? '✨' : '🚫'}
-                        <span className="d-none d-md-inline ms-1">FX</span>
-                      </button>
-                    </div>
-
-                    <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                    {/* Grupo 3: Ventana + Recargar */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                      <a
-                        className="btn btn-outline-light"
-                        href={windowUrl}
-                        target={`SIGAD_DISPLAY_${t.id}`}
-                        rel="noreferrer"
-                        title="Abrir en ventana"
-                      >
-                        ↗ <span className="d-none d-md-inline ms-1">Ventana</span>
-                      </a>
-                      <button
-                        className="btn btn-outline-light"
-                        onClick={() => reloadFrame(`prev-${t.id}`)}
-                        title="Recargar"
-                      >
-                        ↻ <span className="d-none d-md-inline ms-1">Recargar</span>
-                      </button>
-                    </div>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <div className="d-flex flex-column">
+                    <strong className="text-truncate">{t.name}</strong>
+                    <span className="text-secondary small">{t.game}</span>
+                  </div>
+                  <div className="ms-auto d-flex flex-wrap gap-2 align-items-center">
+                    <button
+                      className={`btn btn-sm ${(t.displayTheme || 'dark') === 'light' ? 'btn-warning' : 'btn-outline-warning'}`}
+                      onClick={() => onToggleTheme(t.id)}
+                      title="Alternar tema del display"
+                    >
+                      {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
+                    </button>
+                    <button
+                      className={`btn btn-sm ${isFxOn(t.id) ? 'btn-outline-warning' : 'btn-warning'}`}
+                      onClick={() => toggleFx(t.id)}
+                      title={isFxOn(t.id) ? 'Desactivar efectos visuales' : 'Activar efectos visuales'}
+                    >
+                      ✨
+                    </button>
+                    <button
+                      className={`btn btn-sm ${configMenuFor === t.id ? 'btn-light text-dark' : 'btn-outline-light'}`}
+                      onClick={() => toggleConfigMenu(t.id)}
+                      aria-expanded={configMenuFor === t.id}
+                      aria-controls={`hud-config-${t.id}`}
+                      title="Configurar HUD"
+                    >
+                      ⚙
+                    </button>
+                    <a
+                      className="btn btn-sm btn-outline-light"
+                      href={windowUrl}
+                      target={`SIGAD_DISPLAY_${t.id}`}
+                      rel="noreferrer"
+                      title="Abrir preview en ventana"
+                    >
+                      ↗
+                    </a>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => { closeConfigMenu(); setExpandedId(t.id); }}
+                      title="Expandir preview"
+                    >
+                      ⤢
+                    </button>
                   </div>
                 </div>
+                {showConfigHere && (
+                  <div id={`hud-config-${t.id}`} className="mt-3 p-3 rounded border bg-body-secondary bg-opacity-25">
+                    <div className="d-flex flex-column gap-3">
+                      <div>
+                        <div className="text-secondary small fw-semibold text-uppercase mb-2">Densidad</div>
+                        <div className="btn-group btn-group-sm" role="group" aria-label="Densidad del HUD">
+                          <button type="button" className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'compact')}>Compacto</button>
+                          <button type="button" className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'standard')}>Equilibrado</button>
+                          <button type="button" className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'expanded')}>Amplio</button>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="d-flex align-items-center justify-content-between">
+                          <span className="text-secondary small fw-semibold text-uppercase">Zoom del HUD</span>
+                          <span className="badge text-bg-dark">{hudScale}%</span>
+                        </div>
+                        <div className="d-flex align-items-center gap-2 mt-2">
+                          <button className="btn btn-sm btn-outline-light" onClick={() => updateScale(t.id, hudScale - 5)} aria-label="Reducir zoom">−</button>
+                          <input
+                            type="range"
+                            min={70}
+                            max={140}
+                            step={5}
+                            value={hudScale}
+                            onChange={e => updateScale(t.id, Number(e.target.value))}
+                            className="form-range flex-grow-1"
+                          />
+                          <button className="btn btn-sm btn-outline-light" onClick={() => updateScale(t.id, hudScale + 5)} aria-label="Aumentar zoom">+</button>
+                        </div>
+                        <div className="d-flex flex-wrap gap-2 mt-2">
+                          {ZOOM_PRESETS.map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                              onClick={() => updateScale(t.id, val)}
+                            >
+                              {val}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-secondary small fw-semibold text-uppercase mb-2">Ajuste del marco</div>
+                        <div className="btn-group btn-group-sm" role="group" aria-label="Modo de ajuste del preview">
+                          <button type="button" className={`btn ${fit === 'contain' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'contain' }))}>Contener</button>
+                          <button type="button" className={`btn ${fit === 'width' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'width' }))}>Ancho</button>
+                          <button type="button" className={`btn ${fit === 'height' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'height' }))}>Alto</button>
+                        </div>
+                      </div>
+                      <div className="d-flex flex-wrap gap-2">
+                        <button className="btn btn-sm btn-outline-light" onClick={() => reloadFrame(`prev-${t.id}`)}>↻ Recargar preview</button>
+                        <button className="btn btn-sm btn-outline-light" onClick={() => { updateScale(t.id, 100); applyDensity(t.id, 'standard'); setFitMap(prev => ({ ...prev, [t.id]: 'contain' })); }}>Restablecer</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ===== Body ===== */}
@@ -761,7 +672,8 @@ export const DisplayPreview: React.FC<{
         const h = Math.round(baseH * previewScale);
         const previewScalePct = Math.round(previewScale * 100);
         const { state, color, remainingFmt, phase } = stateInfo(t);
-        const overlayHudActive = hudMenuFor === t.id && expandedId === t.id;
+        const configOpen = configMenuFor === t.id;
+        const showConfigOverlay = configOpen && expandedId === t.id;
         const fitLabel = fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ancho' : 'Alto';
 
         return (
@@ -774,7 +686,7 @@ export const DisplayPreview: React.FC<{
             }}
           >
             <div
-              onClick={() => setExpandedId(null)}
+              onClick={() => { closeConfigMenu(); setExpandedId(null); }}
               style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)' }}
             />
             <div
@@ -789,167 +701,147 @@ export const DisplayPreview: React.FC<{
                 padding: `${outerPad}px`,
               }}
             >
-              {/* Header overlay con grupos */}
-              <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                <strong className="text-truncate">{t.name}</strong>
-                <span className="badge text-bg-secondary">{t.game}</span>
-
-                {/* HUD compacto */}
-                <span className="ms-auto d-flex align-items-center gap-2 small text-secondary">
-                  <span
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '2px 8px', borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb'
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: color, boxShadow: `0 0 0 3px ${color}22` }} />
-                    {state}
-                  </span>
-                  <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
-                    ⏱ {remainingFmt}
-                  </span>
-                  <span className="d-none d-sm-inline" style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
-                    {phase}
-                  </span>
-                </span>
-
-                <div className="d-flex align-items-center flex-wrap gap-2">
-                <span className="small text-secondary me-1">Vista {previewScalePct}% · Zoom {hudScale}% · {densityName}</span>
-
-                {/* Grupo 1 */}
-                <div className="position-relative">
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste HUD">
-                    <button
-                      className="btn btn-outline-light"
-                      onClick={() => cycleFit(t.id)}
-                      title={`Ajuste: ${fitLabel}`}
-                    >
-                      {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                      <span className="d-none d-md-inline ms-1">{fitLabel}</span>
-                    </button>
-                    <button
-                      className={overlayHudActive ? 'btn btn-light' : 'btn btn-outline-light'}
-                      onClick={() => toggleHudMenu(t.id)}
-                      ref={el => { hudButtonRefs.current[t.id] = el; }}
-                      title={`Zoom HUD: ${hudScale}% · ${densityName}`}
-                      aria-expanded={overlayHudActive}
-                      aria-controls={`hud-menu-${t.id}`}
-                    >
-                      {density === 'compact' ? '▣' : density === 'expanded' ? '▢' : '▤'}
-                      <span className="d-none d-md-inline ms-1">HUD</span>
-                    </button>
+              {/* Header overlay */}
+              <div className="d-flex flex-column gap-3 mb-3">
+                <div className="d-flex align-items-start gap-3 flex-wrap">
+                  <div className="d-flex flex-column">
+                    <strong className="text-truncate">{t.name}</strong>
+                    <span className="text-secondary small">{t.game}</span>
                   </div>
-                  <div className="btn-group btn-group-sm ms-2" role="group" aria-label="Zoom del HUD">
-                    <button
-                      type="button"
-                      className="btn btn-outline-light"
-                      onClick={() => nudgeScale(t.id, -5)}
-                      title="Reducir zoom del HUD"
-                      aria-label="Reducir zoom del HUD"
+                  <span className="ms-auto d-flex align-items-center gap-2 small text-secondary">
+                    <span
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '2px 8px', borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb'
+                      }}
                     >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline-light"
-                      onClick={() => nudgeScale(t.id, 5)}
-                      title="Ampliar zoom del HUD"
-                      aria-label="Ampliar zoom del HUD"
-                    >
-                      +
-                    </button>
-                  </div>
-                  {overlayHudActive && (
-                    <div
-                      id={`hud-menu-${t.id}`}
-                      ref={el => { if (expandedId === t.id) hudMenuRef.current = el; }}
-                      className="hud-config-menu shadow"
-                      role="dialog"
-                      aria-label="Opciones de HUD"
-                    >
-                      <div className="hud-config-menu__section">
-                        <div className="hud-config-menu__label">Densidad</div>
-                        <div className="btn-group btn-group-sm w-100" role="group" aria-label="Modo de densidad">
-                          <button type="button" className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'compact')}>
-                            Compacto
-                          </button>
-                          <button type="button" className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'standard')}>
-                            Equilibrado
-                          </button>
-                          <button type="button" className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'expanded')}>
-                            Amplio
-                          </button>
-                        </div>
-                      </div>
-                      <div className="hud-config-menu__section">
-                        <div className="hud-config-menu__label d-flex justify-content-between align-items-center">
-                          <span>Zoom del HUD</span>
-                          <span className="badge text-bg-secondary">{hudScale}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min={70}
-                          max={140}
-                          step={5}
-                          value={hudScale}
-                          onChange={e => updateScale(t.id, Number(e.target.value))}
-                          className="form-range hud-config-menu__slider"
-                          aria-label="Zoom del HUD"
-                        />
-                        <div className="d-flex justify-content-between text-muted small">
-                          <span>Menos zoom</span>
-                          <span>Más zoom</span>
-                        </div>
-                        <div className="d-flex flex-wrap gap-2 mt-2">
-                          {ZOOM_PRESETS.map(val => (
-                            <button
-                              key={val}
-                              type="button"
-                              className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                              onClick={() => updateScale(t.id, val)}
-                            >
-                              {val}%
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <button type="button" className="btn btn-link p-0 small text-decoration-none" onClick={closeHudMenu}>
-                        Cerrar
-                      </button>
-                    </div>
-                  )}
+                      <span style={{ width: 8, height: 8, borderRadius: 999, background: color, boxShadow: `0 0 0 3px ${color}22` }} />
+                      {state}
+                    </span>
+                    <span style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
+                      ⏱ {remainingFmt}
+                    </span>
+                    <span className="d-none d-sm-inline" style={{ padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)', color: '#e5e7eb' }}>
+                      {phase}
+                    </span>
+                  </span>
                 </div>
 
-                  <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                  {/* Grupo 2 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Tema y efectos">
+                <div className="d-flex align-items-center flex-wrap gap-2">
+                  <span className="small text-secondary me-1">Vista {previewScalePct}% · Zoom {hudScale}% · {densityName}</span>
+                  <button
+                    className={`btn btn-sm ${(t.displayTheme || 'dark') === 'light' ? 'btn-warning' : 'btn-outline-warning'}`}
+                    onClick={() => onToggleTheme(t.id)}
+                    title="Alternar tema del display"
+                  >
+                    {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
+                    <span className="d-none d-md-inline ms-1">Tema</span>
+                  </button>
+                  <button
+                    className={`btn btn-sm ${isFxOn(t.id) ? 'btn-outline-warning' : 'btn-warning'}`}
+                    onClick={() => toggleFx(t.id)}
+                    title={isFxOn(t.id) ? 'Desactivar efectos visuales' : 'Activar efectos visuales'}
+                  >
+                    ✨<span className="d-none d-md-inline ms-1">FX</span>
+                  </button>
+                  <div className="position-relative">
                     <button
-                      className={(t.displayTheme || 'dark') === 'light' ? 'btn btn-warning' : 'btn btn-outline-warning'}
-                      onClick={() => onToggleTheme(t.id)}
-                      title="Alternar tema del display"
+                      className={`btn btn-sm ${configOpen ? 'btn-light text-dark' : 'btn-outline-light'}`}
+                      onClick={() => toggleConfigMenu(t.id)}
+                      aria-expanded={configOpen}
+                      aria-controls={`hud-config-overlay-${t.id}`}
+                      title="Configurar HUD"
                     >
-                      {(t.displayTheme || 'dark') === 'light' ? '🌞' : '🌙'}
-                      <span className="d-none d-md-inline ms-1">Tema</span>
+                      ⚙<span className="d-none d-md-inline ms-1">Configurar</span>
                     </button>
-                    <button
-                      className={isFxOn(t.id) ? 'btn btn-outline-warning' : 'btn btn-warning'}
-                      onClick={() => toggleFx(t.id)}
-                      title={isFxOn(t.id) ? 'Desactivar efectos' : 'Activar efectos'}
-                    >
-                      {isFxOn(t.id) ? '✨' : '🚫'} <span className="d-none d-md-inline ms-1">FX</span>
-                    </button>
+                    {showConfigOverlay && (
+                      <div
+                        id={`hud-config-overlay-${t.id}`}
+                        className="mt-2 p-3 rounded border bg-body-secondary bg-opacity-25"
+                        style={{ minWidth: 280, position: 'absolute', right: 0, zIndex: 10 }}
+                      >
+                        <div className="d-flex flex-column gap-3">
+                          <div>
+                            <div className="text-secondary small fw-semibold text-uppercase mb-2">Densidad</div>
+                            <div className="btn-group btn-group-sm" role="group" aria-label="Densidad del HUD">
+                              <button type="button" className={`btn ${density === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'compact')}>Compacto</button>
+                              <button type="button" className={`btn ${density === 'standard' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'standard')}>Equilibrado</button>
+                              <button type="button" className={`btn ${density === 'expanded' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => applyDensity(t.id, 'expanded')}>Amplio</button>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="d-flex align-items-center justify-content-between">
+                              <span className="text-secondary small fw-semibold text-uppercase">Zoom del HUD</span>
+                              <span className="badge text-bg-dark">{hudScale}%</span>
+                            </div>
+                            <div className="d-flex align-items-center gap-2 mt-2">
+                              <button className="btn btn-sm btn-outline-light" onClick={() => updateScale(t.id, hudScale - 5)} aria-label="Reducir zoom">−</button>
+                              <input
+                                type="range"
+                                min={70}
+                                max={140}
+                                step={5}
+                                value={hudScale}
+                                onChange={e => updateScale(t.id, Number(e.target.value))}
+                                className="form-range flex-grow-1"
+                              />
+                              <button className="btn btn-sm btn-outline-light" onClick={() => updateScale(t.id, hudScale + 5)} aria-label="Aumentar zoom">+</button>
+                            </div>
+                            <div className="d-flex flex-wrap gap-2 mt-2">
+                              {ZOOM_PRESETS.map(val => (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  className={`btn btn-sm ${hudScale === val ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                  onClick={() => updateScale(t.id, val)}
+                                >
+                                  {val}%
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-secondary small fw-semibold text-uppercase mb-2">Ajuste del marco</div>
+                            <div className="btn-group btn-group-sm" role="group" aria-label="Modo de ajuste del preview">
+                              <button type="button" className={`btn ${fit === 'contain' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'contain' }))}>Contener</button>
+                              <button type="button" className={`btn ${fit === 'width' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'width' }))}>Ancho</button>
+                              <button type="button" className={`btn ${fit === 'height' ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setFitMap(prev => ({ ...prev, [t.id]: 'height' }))}>Alto</button>
+                            </div>
+                          </div>
+                          <div className="d-flex flex-wrap gap-2">
+                            <button className="btn btn-sm btn-outline-light" onClick={() => reloadFrame(`prev-exp-${t.id}`)}>↻ Recargar preview</button>
+                            <button className="btn btn-sm btn-outline-light" onClick={() => { updateScale(t.id, 100); applyDensity(t.id, 'standard'); setFitMap(prev => ({ ...prev, [t.id]: 'contain' })); }}>Restablecer</button>
+                            <button className="btn btn-sm btn-outline-secondary" onClick={closeConfigMenu}>Cerrar</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-
-                  <div className="toolbar-sep d-none d-sm-block" aria-hidden />
-
-                  {/* Grupo 3 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                    <a className="btn btn-outline-light" href={windowUrl} target={`SIGAD_DISPLAY_${t.id}`} rel="noreferrer" title="Abrir en ventana">↗<span className="d-none d-md-inline ms-1">Ventana</span></a>
-                    <button className="btn btn-outline-light" onClick={() => reloadFrame(`prev-exp-${t.id}`)} title="Recargar">↻<span className="d-none d-md-inline ms-1">Recargar</span></button>
-                    <button className="btn btn-outline-secondary" onClick={() => setExpandedId(null)} title="Cerrar (Esc)">✕<span className="d-none d-md-inline ms-1">Cerrar</span></button>
-                  </div>
+                  <a
+                    className="btn btn-sm btn-outline-light"
+                    href={windowUrl}
+                    target={`SIGAD_DISPLAY_${t.id}`}
+                    rel="noreferrer"
+                    title="Abrir preview en ventana"
+                    onClick={closeConfigMenu}
+                  >
+                    ↗<span className="d-none d-md-inline ms-1">Ventana</span>
+                  </a>
+                  <button
+                    className="btn btn-sm btn-outline-light"
+                    onClick={() => { closeConfigMenu(); reloadFrame(`prev-exp-${t.id}`); }}
+                    title="Recargar preview"
+                  >
+                    ↻<span className="d-none d-md-inline ms-1">Recargar</span>
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => { closeConfigMenu(); setExpandedId(null); }}
+                    title="Cerrar (Esc)"
+                  >
+                    ✕<span className="d-none d-md-inline ms-1">Cerrar</span>
+                  </button>
                 </div>
               </div>
 
@@ -1058,9 +950,8 @@ export const DisplayPreview: React.FC<{
         );
       })()}
 
-      {/* Estilos menores: separador y shimmer */}
+      {/* Estilos menores: shimmer */}
       <style>{`
-        .toolbar-sep{ width:1px; height:24px; background:rgba(255,255,255,.12); opacity:.85 }
         @keyframes sigad-shimmer { 0%{background-position:100% 0} 100%{background-position:0 0} }
       `}</style>
     </>
