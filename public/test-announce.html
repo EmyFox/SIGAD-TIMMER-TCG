@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SIGAD Announce Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body{font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding:20px;}
+      label{display:block; margin:.5rem 0 .25rem}
+      input, select, textarea, button{font:inherit}
+      .row{display:flex; gap:.75rem; flex-wrap:wrap; align-items:center}
+    </style>
+  </head>
+  <body>
+    <h1>Announce Test</h1>
+    <p>Use this page to broadcast a test advanced announcement to displays via BroadcastChannel.</p>
+    <div>
+      <label>Kind</label>
+      <select id="kind">
+        <option value="text">text</option>
+        <option value="url">url</option>
+      </select>
+      <label>Targets (comma separated tournament ids; leave empty for all)</label>
+      <input id="targets" placeholder="id1,id2" style="min-width:360px" />
+      <label>Text / URL</label>
+      <input id="payload" placeholder="Hello or https://..." style="min-width:360px" />
+      <div class="row">
+        <label><input type="checkbox" id="persistent" /> persistent</label>
+        <label>Duration (ms) <input type="number" id="duration" value="8000" style="width:120px"/></label>
+      </div>
+      <div class="row">
+        <button id="send">Send</button>
+      </div>
+    </div>
+    <script>
+      const CHANNEL = 'sigad-display';
+      document.getElementById('send').addEventListener('click', ()=>{
+        const kind = document.getElementById('kind').value;
+        const payloadRaw = document.getElementById('payload').value.trim();
+        const targets = document.getElementById('targets').value.trim().split(',').map(s=>s.trim()).filter(Boolean);
+        const persistent = document.getElementById('persistent').checked;
+        const duration = Number(document.getElementById('duration').value) || 8000;
+        const msg = { type: 'ANNOUNCE_ADV', kind, duration, persistent, payload: {}, targets: targets.length? targets: undefined };
+        if(kind === 'text'){ msg.payload.text = payloadRaw || 'Hello from test!'; }
+        else if(kind === 'url'){ msg.payload.url = payloadRaw || 'https://www.youtube.com/embed/dQw4w9WgXcQ'; }
+        const ch = new BroadcastChannel(CHANNEL); ch.postMessage(msg); ch.close();
+        alert('Sent. Open display.html to see it.');
+      });
+    </script>
+  </body>
+</html>

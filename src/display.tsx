@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import ReactDOM from "react-dom/client";
 import dayjs from "dayjs";
+import 'dayjs/locale/es';
 import {
   subscribeDisplay,
   subscribeAnnouncements,
+  subscribeAdvancedAnnouncements,
+  subscribeClearAnnouncements,
+  subscribeDisplayZoom,
   type DisplayTournament,
   type TimeFmt,
 } from "./displayChannel";
@@ -133,6 +137,48 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
   return items.slice(0, 3);
 }
 
+/** Timeline detallada de próximos eventos (incluye fin de la ronda actual, breaks, fin de cada ronda y fin del evento) */
+function computeTimeline(t: DisplayTournament, tf: TimeFmt) {
+  const items: { label: string; time: string; kind: 'roundEnd'|'breakStart'|'breakEnd'|'eventEnd' }[] = [];
+  let base = Date.now();
+
+  const inSomething = t.timer.target !== null && (t.timer.running || t.timer.remainingMs > 0);
+  const inRound = inSomething && t.timer.mode === "round";
+  const currentIndex = inRound ? t.roundsCompleted + 1 : t.roundsCompleted;
+
+  // Si hay algo corriendo, agrega el fin de ese bloque (ronda o break)
+  const remaining = inSomething ? Math.max(0, (t.timer.target ?? 0) - base) : 0;
+  if (remaining > 0) {
+    items.push({
+      label: t.timer.mode === 'break' ? 'Fin del break' : `Fin ronda ${inRound ? currentIndex : currentIndex + 1}`,
+      time: dayjs(base + remaining).format(fmtClock(tf)),
+      kind: t.timer.mode === 'break' ? 'breakEnd' : 'roundEnd',
+    });
+    base += remaining;
+  }
+
+  // Para las rondas restantes, agregar bloques de break (inicio/fin) y fin de ronda
+  const left = Math.max(0, t.roundsTotal - currentIndex);
+  for (let i = 1; i <= left; i++) {
+    if (t.breakEnabled && t.breakMinutes > 0) {
+      // Inicio de break (coincide con el fin de la ronda previa)
+      items.push({ label: 'Inicio del break', time: dayjs(base).format(fmtClock(tf)), kind: 'breakStart' });
+      base += t.breakMinutes * 60_000;
+      items.push({ label: 'Fin del break', time: dayjs(base).format(fmtClock(tf)), kind: 'breakEnd' });
+    }
+    base += t.roundMinutes * 60_000;
+    items.push({ label: `Fin ronda ${currentIndex + i}`, time: dayjs(base).format(fmtClock(tf)), kind: 'roundEnd' });
+  }
+
+  // Fin del evento (siempre al final de toda la secuencia)
+  if (t.roundsTotal > 0) {
+    items.push({ label: 'Fin del evento', time: dayjs(base).format(fmtClock(tf)), kind: 'eventEnd' });
+  }
+
+  // Limitar a un número razonable para UI
+  return items.slice(0, 8);
+}
+
 /* ==================== Tokens de tema (solo Tailwind) ==================== */
 const pick = (isLight: boolean, light: string, dark: string) => (isLight ? light : dark);
 
@@ -230,6 +276,70 @@ const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = (
   );
 };
 
+/* ==================== Mapa de Rondas ==================== */
+const RoundMap: React.FC<{ t: DisplayTournament; isLight: boolean }> = ({ t, isLight }) => {
+  const inSomething = t.timer.target !== null && (t.timer.running || t.timer.remainingMs > 0);
+  const inRound = inSomething && t.timer.mode === 'round';
+  const currentIndex = inRound ? t.roundsCompleted + 1 : t.roundsCompleted; // 1-based cuando en ronda
+  const total = Math.max(0, t.roundsTotal);
+  const rounds = Array.from({ length: total }, (_, i) => i + 1);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {rounds.map((i) => {
+        const done = i <= t.roundsCompleted;
+        const current = inRound && i === currentIndex;
+        const upcoming = !done && !current;
+        const baseClassLight = "inline-flex items-center gap-2 rounded-xl ring-1 px-3 py-1.5 text-sm";
+        const baseClassDark = "inline-flex items-center gap-2 rounded-xl ring-1 px-3 py-1.5 text-sm";
+        const cls = pick(
+          isLight,
+          done
+            ? `${baseClassLight} bg-emerald-50 ring-emerald-200 text-emerald-700`
+            : current
+            ? `${baseClassLight} bg-indigo-50 ring-indigo-200 text-indigo-700 shadow-sm`
+            : `${baseClassLight} bg-white ring-zinc-200 text-zinc-700`,
+          done
+            ? `${baseClassDark} bg-emerald-900/30 ring-emerald-700 text-emerald-300`
+            : current
+            ? `${baseClassDark} bg-indigo-900/30 ring-indigo-700 text-indigo-300 shadow-sm`
+            : `${baseClassDark} bg-zinc-800/60 ring-zinc-700 text-zinc-200`
+        );
+        return (
+          <React.Fragment key={i}>
+            <span className={cls}>
+              {done ? (
+                <span aria-hidden>✅</span>
+              ) : current ? (
+                <span className="relative inline-flex">
+                  <span className="status-dot bg-indigo-500" />
+                  <span className="status-ping bg-indigo-500" />
+                </span>
+              ) : (
+                <span aria-hidden>•</span>
+              )}
+              <span>Ronda {i}</span>
+            </span>
+            {t.breakEnabled && t.breakMinutes > 0 && i < total && (
+              <span
+                className={pick(
+                  isLight,
+                  "inline-flex items-center gap-1 rounded-full bg-amber-50 ring-1 ring-amber-200 text-amber-700 px-2 py-1 text-[12px]",
+                  "inline-flex items-center gap-1 rounded-full bg-amber-900/20 ring-1 ring-amber-700 text-amber-300 px-2 py-1 text-[12px]"
+                )}
+                title={`Break de ${t.breakMinutes} min`}
+              >
+                <IconCoffee className={pick(isLight, "size-3.5 text-amber-600", "size-3.5 text-amber-300")} />
+                {t.breakMinutes}m
+              </span>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
 /* ==================== Super Header (solo visual) ==================== */
 const SuperHeader: React.FC<{
   isLight: boolean;
@@ -315,18 +425,51 @@ const SuperHeader: React.FC<{
 
 /* ==================== Notificaciones (ANNOUNCE) ==================== */
 type AnnItem = { id: number; text: string; level: "info" | "warn" | "success"; duration: number };
-const AnnounceHost: React.FC = () => {
+
+type ActiveAdv = {
+  id: string; // target tournament id or 'global'
+  kind: 'text'|'image'|'url';
+  text?: string;
+  imageDataUrl?: string;
+  imageAspect?: string;
+  url?: string;
+  interactive?: boolean;
+  persistent: boolean;
+};
+
+const AnnounceHost: React.FC<{ tournaments?: DisplayTournament[]; isLight?: boolean; onMetrics?: (w: number, open: boolean)=>void }>=({ tournaments, isLight, onMetrics }) => {
+  // Legacy short toasts
   const [items, setItems] = useState<AnnItem[]>([]);
   const idRef = useRef(1);
+
+  // Advanced announcements: keep only one per display at a time.
+  const [active, setActive] = useState<ActiveAdv | null>(null);
+  const PERSIST_KEY = 'sigad_display_adv_ann_v1';
+  // Allow any URL; interaction controlled by 'interactive' flag per announcement
+  // Panel open/close persisted
+  const PANEL_KEY = 'sigad_display_ann_open_v1';
+  const [open, setOpen] = useState<boolean>(()=>{ try { return JSON.parse(localStorage.getItem(PANEL_KEY) || 'false'); } catch { return false; } });
+  useEffect(()=>{ try { localStorage.setItem(PANEL_KEY, JSON.stringify(open)); } catch {} }, [open]);
+  // Auto-open when active exists; auto-hide when none (but respect explicit toggle once user interacts)
+  useEffect(()=>{
+    if (active && !open) setOpen(true);
+    if (!active && open) setOpen(false);
+  }, [active]);
+
+  // Load persistent announcement from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PERSIST_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as ActiveAdv | null;
+      if (parsed) setActive(parsed);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     const off = subscribeAnnouncements((a) => {
       const id = idRef.current++;
-      const item: AnnItem = {
-        id,
-        text: a.text,
-        level: a.level,
-        duration: Math.max(1000, a.duration || 8000),
-      };
+      const item: AnnItem = { id, text: a.text, level: a.level, duration: Math.max(1000, a.duration || 8000) };
       setItems((prev) => [item, ...prev].slice(0, 4));
       const t = setTimeout(() => setItems((prev) => prev.filter((x) => x.id !== id)), item.duration);
       return () => clearTimeout(t);
@@ -334,44 +477,209 @@ const AnnounceHost: React.FC = () => {
     return off;
   }, []);
 
-  const close = (id: number) => setItems((prev) => prev.filter((x) => x.id !== id));
+  useEffect(() => {
+  const off2 = subscribeAdvancedAnnouncements((m) => {
+      // If the message has targets and this display has tournaments, check membership
+      const thisIds = (tournaments || []).map(t => t.id);
+      const targetAll = !m.targets || m.targets.length === 0;
+      const matches = targetAll || m.targets!.some(id => thisIds.includes(id));
+      if (!matches) return;
+
+      // Only one active advanced announcement per display. Replace previous.
+      const id = m.targets && m.targets.length === 1 ? m.targets[0] : 'global';
+      const adv: ActiveAdv = {
+        id,
+        kind: m.kind,
+        text: m.payload.text,
+        imageDataUrl: m.payload.imageDataUrl,
+        imageAspect: m.payload.imageAspect,
+        url: m.payload.url,
+        interactive: (m.payload as any)?.interactive ? true : false,
+        persistent: !!m.persistent,
+      };
+  setActive(adv);
+  setOpen(true);
+
+  // If persistent, save to localStorage so it survives reloads
+      try {
+        if (adv.persistent) {
+          localStorage.setItem(PERSIST_KEY, JSON.stringify(adv));
+        } else {
+          // If not persistent, clear any stored persistent announcement for this display
+          const raw = localStorage.getItem(PERSIST_KEY);
+          if (raw) {
+            try {
+              const prev = JSON.parse(raw) as ActiveAdv | null;
+              if (prev && prev.id === adv.id) localStorage.removeItem(PERSIST_KEY);
+            } catch {}
+          }
+        }
+      } catch {}
+
+      return undefined;
+    });
+    return off2;
+  }, [tournaments]);
+
+  // Handle CLEAR advanced announcement messages
+  useEffect(() => {
+    const off = subscribeClearAnnouncements((m) => {
+      const thisIds = (tournaments || []).map(t => t.id);
+      const targetAll = !m.targets || m.targets.length === 0;
+      const matches = targetAll || m.targets!.some(id => thisIds.includes(id));
+      if (!matches) return;
+      try { localStorage.removeItem(PERSIST_KEY); } catch {}
+      setActive(null);
+      setOpen(false);
+    });
+    return off;
+  }, [tournaments]);
+
+  const closeToast = (id: number) => setItems((prev) => prev.filter((x) => x.id !== id));
   const tone = (lvl: AnnItem["level"]) =>
     lvl === "success" ? ["#059669", "#10b981"] : lvl === "warn" ? ["#b45309", "#f59e0b"] : ["#3730a3", "#6366f1"];
 
-  if (!items.length) return null;
+  // Render Announcement Panel within layout (toggleable) + legacy toasts top-right.
+  const asideRef = useRef<HTMLDivElement | null>(null);
+  // Drawer sizing responsive to viewport
+  const computeDrawerWidth = () => {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    // 30-36% del viewport, clamp a [280, 520]
+    const base = vw * 0.34;
+    return Math.round(Math.min(520, Math.max(280, base)));
+  };
+  const computeImageMaxH = () => {
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
+    // 52-60% de la altura de la ventana, clamp a [240, 640]
+    const base = vh * 0.56;
+    return Math.round(Math.min(640, Math.max(240, base)));
+  };
+  const [drawerW, setDrawerW] = useState<number>(computeDrawerWidth());
+  const [imgMaxH, setImgMaxH] = useState<number>(computeImageMaxH());
+  useEffect(()=>{
+    const onR = () => { setDrawerW(computeDrawerWidth()); setImgMaxH(computeImageMaxH()); };
+    window.addEventListener('resize', onR);
+    return () => window.removeEventListener('resize', onR);
+  }, []);
+  // Reportar dimensiones al display para empujar layout
+  useEffect(()=>{
+    const el = asideRef.current;
+    const send = () => {
+      if (!onMetrics) return;
+      if (active && open && el) {
+        const w = Math.round(el.getBoundingClientRect().width);
+        // Empuja usando el ancho real del cajón + margen pequeño
+        const pad = w + 16;
+        onMetrics(pad, true);
+      } else {
+        onMetrics(0, false);
+      }
+    };
+    send();
+    const ro = el && 'ResizeObserver' in window ? new ResizeObserver(send) : null;
+    if (el && ro) ro.observe(el);
+    const rsz = () => send();
+    window.addEventListener('resize', rsz);
+    return ()=>{ window.removeEventListener('resize', rsz); if (el && ro) ro.disconnect(); };
+  }, [active, open, onMetrics]);
+
   return (
-    <div className="sigad-noti-stack tr" style={{ zIndex: 3000 }} aria-live="polite">
-      {items.map((it) => {
-        const [c1, c2] = tone(it.level);
-        const style: React.CSSProperties = {
-          ["--accent" as any]: c1,
-          ["--accent2" as any]: c2,
-          ["--life" as any]: `${it.duration}ms`,
-        };
-        return (
-          <div key={it.id} className="sigad-noti sigad-noti-enter" style={style}>
-            <div className="sigad-noti-progress" />
-            <div className="sigad-noti-accent" />
-            <div className="sigad-noti-body">
-              <div className="sigad-noti-icon" aria-hidden>
-                {it.level === "success" ? "✅" : it.level === "warn" ? "⚠️" : "📢"}
-              </div>
-              <div className="sigad-noti-content">
-                <div className="sigad-noti-text">{it.text}</div>
-              </div>
-              <button className="sigad-noti-close" aria-label="Cerrar" onClick={() => close(it.id)}>
-                ✕
+    <>
+      {/* Overlay para énfasis y cerrar al click */}
+      {active && (
+        <div
+          className="fixed inset-0 z-30"
+          style={{ background: open ? 'rgba(0,0,0,.08)' : 'transparent', transition: 'background .25s ease', pointerEvents: open ? 'auto' : 'none' }}
+          onClick={()=>setOpen(false)}
+        />
+      )}
+      {/* Drawer lateral (right) */}
+      {active && (
+          <aside
+            className={pick(
+              isLight ?? false,
+              "fixed top-4 right-0 z-40 overflow-hidden rounded-l-2xl border border-zinc-200 bg-white/80 shadow-xl backdrop-blur",
+              "fixed top-4 right-0 z-40 overflow-hidden rounded-l-2xl border border-zinc-800 bg-zinc-900/70 shadow-xl backdrop-blur"
+            )}
+            ref={asideRef}
+            style={{ width: drawerW, transform: open ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .35s ease' }}
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700/30">
+              <span className={pick(isLight ?? false, "text-zinc-700 font-semibold", "font-semibold")}>Anuncio</span>
+              <span className={pick(isLight ?? false, "text-[12px] text-zinc-500", "text-[12px] text-zinc-400")}>
+                {active.persistent ? "Persistente" : "Temporal"}
+              </span>
+              <button
+                className={pick(isLight ?? false, "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-100", "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-700 hover:bg-zinc-800/70")}
+                onClick={()=>setOpen(o=>!o)}
+                aria-expanded={open}
+              >
+                {open ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
-          </div>
-        );
-      })}
-    </div>
+            {open && (
+              <div className="p-4">
+                {active.kind === 'text' && (
+                  <div className={pick(isLight ?? false, "text-center text-zinc-800 text-lg font-bold leading-snug", "text-center text-lg font-bold leading-snug")}>{active.text}</div>
+                )}
+                {active.kind === 'image' && active.imageDataUrl && (
+                  <div className="flex flex-col items-center gap-2">
+                    <img src={active.imageDataUrl} alt="Anuncio" style={{ maxWidth: '100%', maxHeight: imgMaxH, objectFit: 'contain', borderRadius: 12 }} />
+                    {active.text && <div className={pick(isLight ?? false, "text-[13px] text-zinc-600 text-center", "text-[13px] text-zinc-400 text-center")}>{active.text}</div>}
+                  </div>
+                )}
+                {active.kind === 'url' && active.url && (
+                  <div style={{ width: '100%', height: 420, borderRadius: 10, overflow: 'hidden' }}>
+                    <iframe
+                      src={active.url}
+                      style={{ width: '100%', height: '100%', border: 0 }}
+                      title="Anuncio especial"
+                      {...(active.interactive ? {} : { sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups' })}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        )}
+
+      {items.length > 0 && (
+        <div className="sigad-noti-stack tr" style={{ zIndex: 3000 }} aria-live="polite">
+          {items.map((it) => {
+            const [c1, c2] = tone(it.level);
+            const style: React.CSSProperties = {
+              ["--accent" as any]: c1,
+              ["--accent2" as any]: c2,
+              ["--life" as any]: `${it.duration}ms`,
+            };
+            return (
+              <div key={it.id} className="sigad-noti sigad-noti-enter" style={style}>
+                <div className="sigad-noti-progress" />
+                <div className="sigad-noti-accent" />
+                <div className="sigad-noti-body">
+                  <div className="sigad-noti-icon" aria-hidden>
+                    {it.level === "success" ? "✅" : it.level === "warn" ? "⚠️" : "📢"}
+                  </div>
+                  <div className="sigad-noti-content">
+                    <div className="sigad-noti-text">{it.text}</div>
+                  </div>
+                  <button className="sigad-noti-close" aria-label="Cerrar" onClick={() => closeToast(it.id)}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 };
 
 /* ==================== Display Root ==================== */
 const Display: React.FC = () => {
+  useEffect(()=>{ try { dayjs.locale('es'); } catch{} }, []);
   const [timeFmt, setTimeFmt] = useState<TimeFmt>("24");
   const [tournaments, setTournaments] = useState<DisplayTournament[]>([]);
   const [connected, setConnected] = useState(false); // reservado por si muestras estado de conexión
@@ -408,7 +716,7 @@ const Display: React.FC = () => {
     return Math.max(0, remainingMs || 0);
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
-  const schedule = active ? computeSchedule(active, timeFmt) : [];
+  const timeline = active ? computeTimeline(active, timeFmt) : [];
 
   const progressPct = useMemo(() => {
     if (!active) return 0;
@@ -453,6 +761,34 @@ const Display: React.FC = () => {
   const accent: "indigo" | "amber" = active?.timer.mode === "break" ? "amber" : "indigo";
   const isLight = active?.theme === "light";
 
+  // ===== Zoom de display controlado por App (por torneo) =====
+  const ZOOM_LS = 'sigad_display_zoom_v2';
+  const fixedParamId = useRef<string | null>(getParam('id'));
+  const readObj = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch { return {}; } };
+  const [zoomMap, setZoomMap] = useState<Record<string, number>>(() => readObj(ZOOM_LS));
+  const activeId = useMemo(() => fixedParamId.current || active?.id || 'global', [active?.id]);
+  const currentZoom = useMemo(() => {
+    const z = Number(zoomMap[activeId] ?? (fixedParamId.current ? 1 : zoomMap['global'] ?? 1));
+    return Number.isFinite(z) && z > 0 ? Math.max(0.01, z) : 1;
+  }, [zoomMap, activeId]);
+  useEffect(() => { try { localStorage.setItem(ZOOM_LS, JSON.stringify(zoomMap)); } catch {} }, [zoomMap]);
+  useEffect(() => {
+    const off = subscribeDisplayZoom((m) => {
+      // Si no hay targets => usar clave 'global'. Si hay, actualizar por id.
+      const z = Math.max(0.01, Number(m.zoom) || 1);
+      setZoomMap(prev => {
+        const next = { ...prev } as Record<string, number>;
+        if (!m.targets || m.targets.length === 0) {
+          next['global'] = z;
+        } else {
+          for (const id of m.targets) next[id] = z;
+        }
+        return next;
+      });
+    });
+    return off;
+  }, []);
+
   const pages = useMemo(() => chunk(tournaments, 3), [tournaments]);
   useEffect(() => {
     setPage(0);
@@ -464,6 +800,25 @@ const Display: React.FC = () => {
     return () => clearInterval(id);
   }, [pages.length]);
 
+  const [drawerPad, setDrawerPad] = useState(0);
+  // Escala automática basada en resolución de pantalla y ancho del drawer
+  const [autoScale, setAutoScale] = useState(1);
+  const computeAutoScale = React.useCallback(() => {
+    const BASE_W = 1280; // ancho objetivo del layout principal
+    const BASE_H = 900;  // altura objetivo aproximada
+    const availW = Math.max(320, window.innerWidth - drawerPad - 24);
+    const availH = Math.max(320, window.innerHeight - 24);
+    const s = Math.min(1, availW / BASE_W, availH / BASE_H);
+    setAutoScale(s);
+  }, [drawerPad]);
+  useEffect(() => {
+    computeAutoScale();
+    const onR = () => computeAutoScale();
+    window.addEventListener('resize', onR);
+    return () => window.removeEventListener('resize', onR);
+  }, [computeAutoScale]);
+
+  const scale = Math.max(0.01, autoScale * currentZoom);
   return (
     <div
       className={pick(
@@ -499,9 +854,10 @@ const Display: React.FC = () => {
         )}
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        {/* Notificaciones HUD */}
-        <AnnounceHost />
+      <div className="relative z-20">
+  <div className="relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${100/scale}%` }}>
+  <div className="max-w-7xl mx-auto px-6 py-8" style={{ marginRight: drawerPad ? `${Math.round(drawerPad / scale)}px` : undefined, transition: 'margin-right .3s ease' }}>
+        {/* Notificaciones HUD (solo toasts legacy) */}
 
         {/* === HEADER SUPER VISUAL === */}
         <SuperHeader
@@ -660,40 +1016,62 @@ const Display: React.FC = () => {
               </div>
             </div>
 
-            {/* Hitos */}
-            {schedule.length > 0 && (
-              <div
-                className={pick(
-                  !!isLight,
-                  "mt-5 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
-                  "mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
+            {/* Mapa de rondas + Próximos eventos */}
+            {active && (
+              <div className="mt-5 grid grid-cols-1 lg:grid-cols-5 gap-4">
+                {/* Mapa */}
+                <div
+                  className={pick(
+                    !!isLight,
+                    "lg:col-span-3 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
+                    "lg:col-span-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
+                  )}
+                >
+                  <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>Mapa de rondas</div>
+                  <RoundMap t={active} isLight={!!isLight} />
+                </div>
+
+                {/* Timeline */}
+                {timeline.length > 0 && (
+                  <div
+                    className={pick(
+                      !!isLight,
+                      "lg:col-span-2 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
+                      "lg:col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
+                    )}
+                  >
+                    <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>Próximos eventos</div>
+                    <div className="flex flex-col gap-2">
+                      {timeline.map((it, i) => (
+                        <div
+                          key={i}
+                          className={pick(
+                            !!isLight,
+                            "flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm",
+                            "flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm"
+                          )}
+                        >
+                          {it.kind === 'breakStart' || it.kind === 'breakEnd' ? (
+                            <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                          ) : (
+                            <IconClock className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                          )}
+                          <span className={pick(!!isLight, "text-zinc-600", "text-zinc-300")}>{it.label}:</span>
+                          <strong className={pick(!!isLight, "tracking-tight text-zinc-900 ml-auto", "tracking-tight text-zinc-100 ml-auto")}>
+                            {it.time}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-              >
-                <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>
-                  Próximos hitos
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {schedule.map((it, i) => (
-                    <span
-                      key={i}
-                      className={pick(
-                        !!isLight,
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm chip-glow",
-                        "inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-1.5 text-sm chip-glow"
-                      )}
-                    >
-                      <IconClock className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                      <span className={pick(!!isLight, "text-zinc-600", "text-zinc-300")}>{it.label}:</span>
-                      <strong className={pick(!!isLight, "tracking-tight text-zinc-900", "tracking-tight text-zinc-100")}>
-                        {it.time}
-                      </strong>
-                    </span>
-                  ))}
-                </div>
               </div>
             )}
           </section>
         )}
+
+  {/* Panel de anuncios: colocar DEBAJO del HUD principal */}
+  <AnnounceHost tournaments={tournaments} isLight={!!isLight} onMetrics={(w, open)=> setDrawerPad(open ? w + 24 : 0)} />
 
         {/* Lista compacta (3 por página) */}
         {!fixedId.current && tournaments.length > 1 && (
@@ -746,7 +1124,9 @@ const Display: React.FC = () => {
             </div>
           </div>
         )}
+        </div>
       </div>
+    </div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { emitAll, type TimeFmt } from './displayChannel';
+import { emitAll, emitDisplayZoom, emitClearAnnouncement, type TimeFmt } from './displayChannel';
 import type { Tournament } from './App';
 
 /**
@@ -36,11 +36,29 @@ export const DisplayPreview: React.FC<{
   };
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v|0));
 
-  // Sidebar heights
-  const LS_H = 'sigad_preview_h_v4';
-  const [heights, setHeights] = useState<Record<string, number>>(() => readObj(LS_H));
-  const DEFAULT_H = 260;
-  const clampSidebarH = (v: number) => clamp(v, 140, 860);
+  // Zoom por display (persistente)
+  const LS_ZOOM = 'sigad_preview_zoom_v1';
+  const [zoomMap, setZoomMap] = useState<Record<string, number>>(() => readObj(LS_ZOOM));
+  const [zoomBounds, setZoomBounds] = useState<Record<string, { min: number; max: number }>>({});
+  const getZoom = (id: string) => {
+    const z = Number(zoomMap[id]);
+    return Number.isFinite(z) && z > 0 ? Math.max(0.01, z) : 1;
+  };
+  const setZoom = (id: string, v: number) => {
+    // Sin límite superior: si el valor llega al borde actual, expandimos el rango para ese id
+    const bounds = zoomBounds[id] || { min: 0.5, max: 2 };
+    let min = Math.max(0.01, bounds.min);
+    let max = Math.max(min + 0.01, bounds.max);
+    let val = Number(v);
+    if (!Number.isFinite(val) || val <= 0) val = 1;
+    // Expandir dinámicamente si alcanzó el borde
+    const EPS = 1e-6;
+    if (val >= max - EPS) max = Math.max(max * 1.25, val * 1.1);
+    if (val <= min + EPS) min = Math.max(0.01, min * 0.75);
+    setZoomBounds(prev => ({ ...prev, [id]: { min, max } }));
+    setZoomMap(prev => ({ ...prev, [id]: val }));
+    try { emitDisplayZoom({ targets: [id], zoom: val }); } catch {}
+  };
 
   // FX on/off
   const LS_FX = 'sigad_preview_fx_v1';
@@ -53,29 +71,27 @@ export const DisplayPreview: React.FC<{
   // Overlay heights
   const LS_H_EXP = 'sigad_preview_h_exp_v1';
   const [expHeights, setExpHeights] = useState<Record<string, number>>(() => readObj(LS_H_EXP));
-  const DEFAULT_H_EXP = 580;
+  // Larger expanded overlay default
+  const DEFAULT_H_EXP = 720;
   const clampOverlayH = (v: number) => clamp(v, 240, Math.max(780, Math.floor(window.innerHeight * 0.95)));
 
-  useEffect(() => { try { localStorage.setItem(LS_H, JSON.stringify(heights)); } catch {} }, [heights]);
+  useEffect(() => { try { localStorage.setItem(LS_ZOOM, JSON.stringify(zoomMap)); } catch {} }, [zoomMap]);
   useEffect(() => { try { localStorage.setItem(LS_FX, JSON.stringify(fxMap)); } catch {} }, [fxMap]);
   useEffect(() => { try { localStorage.setItem(LS_FIT, JSON.stringify(fitMap)); } catch {} }, [fitMap]);
   useEffect(() => { try { localStorage.setItem(LS_H_EXP, JSON.stringify(expHeights)); } catch {} }, [expHeights]);
 
-  const getH     = (id: string) => clampSidebarH(heights[id] ?? DEFAULT_H);
-  const setH     = (id: string, v: number) => setHeights(prev => ({ ...prev, [id]: clampSidebarH(v) }));
   const isFxOn   = (id: string) => fxMap[id] !== false; // por defecto ON
   const toggleFx = (id: string) => setFxMap(prev => ({ ...prev, [id]: !(prev[id] !== false) }));
-  const getFit   = (id: string) => (fitMap[id] ?? 'contain') as 'contain'|'width'|'height';
-  const cycleFit = (id: string) => setFitMap(prev => {
-    const cur = (prev[id] ?? 'contain') as 'contain'|'width'|'height';
-    const next = cur === 'contain' ? 'width' : cur === 'width' ? 'height' : 'contain';
-    return { ...prev, [id]: next };
-  });
+  // Force width-fit by default for consistent auto-fitting in operator previews.
+  // Keep the legacy fitMap for backward-compat but prefer 'width' always.
+  const getFit   = (id: string) => 'width' as 'contain'|'width'|'height';
+  const cycleFit = (_id: string) => { /* no-op: fit mode locked to width for operators */ };
   const getExpH  = (id: string) => clampOverlayH(expHeights[id] ?? DEFAULT_H_EXP);
   const setExpH  = (id: string, v: number) => setExpHeights(prev => ({ ...prev, [id]: clampOverlayH(v) }));
 
-  /* ---------- Base display 16:9 ---------- */
-  const baseW = 1280, baseH = 720;
+  /* ---------- Base display 16:9 (increased for larger preview) ---------- */
+  // Use a larger base resolution (16:9) so the scaled previews look bigger and crisper
+  const baseW = 1536, baseH = 864;
 
   /* ---------- Sincronización inicial con displays ---------- */
   useEffect(() => { try { emitAll(tournaments, timeFmt); } catch {} }, [tournaments, timeFmt]);
@@ -87,49 +103,13 @@ export const DisplayPreview: React.FC<{
     return () => clearInterval(id);
   }, []);
 
-  /* ---------- Drag (sidebar) ---------- */
-  const [hoverId, setHoverId] = useState<string | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const prevCursorRef = useRef<string>('');
-  const prevUserSelectRef = useRef<string>('');
-  const dragRef = useRef<{ id: string; startY: number; startH: number } | null>(null);
-
-  const onPointerMove = (e: PointerEvent) => {
-    if (!dragRef.current) return;
-    const dy = e.clientY - dragRef.current.startY;
-    const nh = clampSidebarH(dragRef.current.startH + dy);
-    setH(dragRef.current.id, nh);
-  };
-  const endDrag = () => {
-    dragRef.current = null;
-    setDraggingId(null);
-    document.body.style.cursor = prevCursorRef.current;
-    (document.body.style as any).userSelect = prevUserSelectRef.current;
-    window.removeEventListener('pointermove', onPointerMove as any);
-    window.removeEventListener('pointerup', endDrag as any);
-  };
-  const onDragStart = (id: string) => (e: React.PointerEvent) => {
-    dragRef.current = { id, startY: e.clientY, startH: getH(id) };
-    setDraggingId(id);
-    prevCursorRef.current = document.body.style.cursor;
-    prevUserSelectRef.current = (document.body.style as any).userSelect || '';
-    document.body.style.cursor = 'ns-resize';
-    (document.body.style as any).userSelect = 'none';
-    window.addEventListener('pointermove', onPointerMove as any);
-    window.addEventListener('pointerup', endDrag as any);
-  };
-  useEffect(() => () => { endDrag(); }, []);
-
-  // Wheel fine-tune en la barra (Alt = +/− 6px, Shift = +/− 2px, normal = 12px)
-  const wheelAdjust = (id: string) => (e: React.WheelEvent) => {
-    const step = e.shiftKey ? 2 : e.altKey ? 6 : 12;
-    const dir = Math.sign(e.deltaY);
-    setH(id, getH(id) + dir * step);
-  };
+  /* ---------- Sin arrastre de altura en sidebar (auto ajuste + zoom) ---------- */
 
   /* ---------- Overlay (expandido) ---------- */
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const overlayDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const prevCursorRef = useRef<string>('');
+  const prevUserSelectRef = useRef<string>('');
   const [overlayDragging, setOverlayDragging] = useState(false);
   const onOverlayMove = (e: PointerEvent) => {
     if (!overlayDragRef.current || !expandedId) return;
@@ -248,9 +228,7 @@ export const DisplayPreview: React.FC<{
       <section aria-label="Previews del display" className="d-flex flex-column gap-3">
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
           <h6 className="m-0 text-secondary">Previews ({sorted.length})</h6>
-          <div className="small text-secondary text-opacity-75">
-            Arrastra la barra para altura · Doble clic (barra) = reset · Doble clic (preview) = cambiar ajuste
-          </div>
+          <div className="small text-secondary text-opacity-75">Doble clic en el preview = Expandir</div>
         </div>
 
         {sorted.length === 0 && (
@@ -258,7 +236,6 @@ export const DisplayPreview: React.FC<{
         )}
 
         {sorted.map(t => {
-          const hNow = getH(t.id);
           const fit = getFit(t.id);
           const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
           const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
@@ -266,11 +243,10 @@ export const DisplayPreview: React.FC<{
           // Medición de ancho disponible:
           const availW = Math.max(240, (boxW[t.id] ?? 0) || 0);
 
-          // Escalas por alto y por ancho:
-          const sH = Math.max(0.1, hNow / baseH);
+          // Auto-fit por ancho + zoom (sin altura manual)
           const sW = Math.max(0.1, availW / baseW);
-          const raw = fit === 'height' ? sH : fit === 'width' ? sW : Math.min(sH, sW);
-          const scale = snapScale(raw);
+          // El zoom ya no aplica al PREVIEW; se envía al display real.
+          const scale = snapScale(sW);
 
           const frameW = Math.round(baseW * scale);
           const frameH = Math.round(baseH * scale);
@@ -287,22 +263,42 @@ export const DisplayPreview: React.FC<{
                   <span className="badge text-bg-secondary">{t.game}</span>
 
                   <div className="ms-auto d-flex align-items-center flex-wrap gap-2">
-                    {/* Grupo 1: Ajuste + Expandir */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste y expandir">
-                      <button
-                        className="btn btn-outline-light"
-                        onClick={() => cycleFit(t.id)}
-                        title={`Ajuste: ${fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ajustar al ancho' : 'Ajustar al alto'}`}
-                        aria-label="Cambiar modo de ajuste"
-                      >
-                        {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                        <span className="d-none d-md-inline ms-1">
-                          {fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}
-                        </span>
-                      </button>
+                    {/* Grupo 1: Expandir (fit bloqueado a ancho) */}
+                    <div className="btn-group btn-group-sm" role="group" aria-label="Expandir">
                       <button className="btn btn-primary" onClick={() => setExpandedId(t.id)} title="Expandir preview">
                         ⤢ <span className="d-none d-md-inline ms-1">Expandir</span>
                       </button>
+                    </div>
+
+                    <div className="toolbar-sep d-none d-sm-block" aria-hidden />
+
+                    {/* Zoom por display (botones) */}
+                    <div className="d-flex align-items-center gap-2">
+                      <label className="small text-secondary d-none d-sm-inline" style={{minWidth:42}}>Zoom</label>
+                      <div className="btn-group btn-group-sm" role="group" aria-label={`Zoom de ${t.name}`}>
+                        <button
+                          className="btn btn-outline-light"
+                          onClick={() => setZoom(t.id, getZoom(t.id) - 0.05)}
+                          title="Reducir 5%"
+                        >
+                          −
+                        </button>
+                        <button
+                          className="btn btn-outline-light"
+                          onClick={() => setZoom(t.id, 1)}
+                          title="Restablecer al 100%"
+                        >
+                          100%
+                        </button>
+                        <button
+                          className="btn btn-outline-light"
+                          onClick={() => setZoom(t.id, getZoom(t.id) + 0.05)}
+                          title="Aumentar 5%"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="small text-secondary" style={{width:44, textAlign:'right'}}>{Math.round(getZoom(t.id)*100)}%</span>
                     </div>
 
                     <div className="toolbar-sep d-none d-sm-block" aria-hidden />
@@ -329,22 +325,17 @@ export const DisplayPreview: React.FC<{
 
                     <div className="toolbar-sep d-none d-sm-block" aria-hidden />
 
-                    {/* Grupo 3: Ventana + Recargar */}
-                    <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                      <a
-                        className="btn btn-outline-light"
-                        href={url}
-                        target={`SIGAD_DISPLAY_${t.id}`}
-                        rel="noreferrer"
-                        title="Abrir en ventana"
-                      >
-                        ↗ <span className="d-none d-md-inline ms-1">Ventana</span>
-                      </a>
-                      <button
-                        className="btn btn-outline-light"
-                        onClick={() => reloadFrame(`prev-${t.id}`)}
-                        title="Recargar"
-                      >
+                    {/* Anuncios: limpiar activo en ese display */}
+                    <div className="btn-group btn-group-sm" role="group" aria-label="Anuncio">
+                      <button className="btn btn-outline-danger" onClick={() => emitClearAnnouncement({ targets: [t.id] })} title="Limpiar anuncio activo">
+                        🗑 <span className="d-none d-md-inline ms-1">Limpiar anuncio</span>
+                      </button>
+                    </div>
+
+                    {/* Recargar */
+                    }
+                    <div className="btn-group btn-group-sm" role="group" aria-label="Recargar">
+                      <button className="btn btn-outline-light" onClick={() => reloadFrame(`prev-${t.id}`)} title="Recargar">
                         ↻ <span className="d-none d-md-inline ms-1">Recargar</span>
                       </button>
                     </div>
@@ -358,7 +349,6 @@ export const DisplayPreview: React.FC<{
                 <div
                   ref={setBoxRef(t.id)}
                   style={{
-                    height: hNow,
                     display: 'grid',
                     placeItems: 'center',
                     background: 'linear-gradient(180deg, rgba(255,255,255,.03), transparent)'
@@ -374,7 +364,7 @@ export const DisplayPreview: React.FC<{
                       position: 'relative',
                       transition: 'width 120ms ease, height 120ms ease'
                     }}
-                    title="Doble clic para cambiar el modo de ajuste"
+                    title="Doble clic para Expandir"
                   >
                     {/* Skeleton / Spinner mientras carga */}
                     {!loaded[t.id] && (
@@ -494,31 +484,11 @@ export const DisplayPreview: React.FC<{
                       }}
                     >
                       <span>{scalePct}%</span>
-                      <span style={{ opacity: 0.85 }}>{fit}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Barra de arrastre (sidebar) */}
-                <div
-                  onPointerDown={onDragStart(t.id)}
-                  onWheel={wheelAdjust(t.id)}
-                  onMouseEnter={() => setHoverId(t.id)}
-                  onMouseLeave={() => setHoverId(prev => prev === t.id ? null : prev)}
-                  onDoubleClick={() => setH(t.id, DEFAULT_H)}
-                  style={{
-                    position: 'absolute', left: 0, right: 0, bottom: 0,
-                    height: 18, cursor: 'ns-resize',
-                    background: (hoverId === t.id || draggingId === t.id)
-                      ? 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18))'
-                      : 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)',
-                    display: 'grid', placeItems: 'center',
-                    borderTop: '1px dashed rgba(128,128,128,.25)'
-                  }}
-                  title="Arrastra / rueda para ajustar altura · Doble clic para restablecer"
-                >
-                  <div style={{ width: 38, height: 4, borderRadius: 2, background: (hoverId === t.id || draggingId === t.id) ? 'rgba(128,128,128,.9)' : 'rgba(128,128,128,.6)' }} />
-                </div>
+                {/* Sin barra de arrastre: auto-fit + zoom individual */}
               </div>
             </div>
           );
@@ -533,16 +503,19 @@ export const DisplayPreview: React.FC<{
         const themeParam = (t.displayTheme || 'dark') === 'light' ? '&theme=light' : '';
         const url = `/display.html?id=${encodeURIComponent(t.id)}${isFxOn(t.id) ? '' : '&nofx=1'}${themeParam}`;
 
-        // Dimensiones disponibles
-        const outerPad = 24;
-        const availableW = Math.max(320, window.innerWidth - outerPad * 2);
-        const availableH = Math.max(260, window.innerHeight - outerPad * 2 - 56 /*header*/);
+    // Dimensiones disponibles
+    const outerPad = 24;
+    const availableW = Math.max(320, window.innerWidth - outerPad * 2);
+    const availableH = Math.max(260, window.innerHeight - outerPad * 2 - 56 /*header*/);
 
-        const targetH = Math.min(getExpH(t.id), availableH);
-        const sH = Math.max(0.1, targetH / baseH);
-        const sW = Math.max(0.1, availableW / baseW);
-        const raw = fit === 'height' ? sH : fit === 'width' ? sW : Math.min(sH, sW);
-        const scale = snapScale(raw);
+    // Altura objetivo: por defecto ocupa toda la ventana disponible, ajustable por drag
+    const targetH = Math.min(getExpH(t.id) || availableH, availableH);
+    // Ajuste a ventana: usar el mínimo entre ajuste por ancho y por alto
+    const sW = Math.max(0.1, availableW / baseW);
+    const sH = Math.max(0.1, targetH / baseH);
+    const raw = Math.min(sW, sH);
+    // El zoom se aplica en el DISPLAY real, no en el overlay/preview
+    const scale = snapScale(raw);
 
         const w = Math.round(baseW * scale);
         const h = Math.round(baseH * scale);
@@ -566,7 +539,7 @@ export const DisplayPreview: React.FC<{
               className="shadow-lg"
               style={{
                 position: 'relative',
-                width: 'min(1140px, 96vw)',
+                width: '96vw',
                 maxWidth: '96vw',
                 background: '#11141a',
                 border: '1px solid #2c313a',
@@ -575,7 +548,7 @@ export const DisplayPreview: React.FC<{
               }}
             >
               {/* Header overlay con grupos */}
-              <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                  <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
                 <strong className="text-truncate">{t.name}</strong>
                 <span className="badge text-bg-secondary">{t.game}</span>
 
@@ -602,16 +575,17 @@ export const DisplayPreview: React.FC<{
                 <div className="d-flex align-items-center flex-wrap gap-2">
                   <span className="small text-secondary me-1">{scalePct}%</span>
 
-                  {/* Grupo 1 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ajuste">
-                    <button
-                      className="btn btn-outline-light"
-                      onClick={() => cycleFit(t.id)}
-                      title={`Ajuste: ${fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ajustar al ancho' : 'Ajustar al alto'}`}
-                    >
-                      {fit === 'contain' ? '⤧' : fit === 'width' ? '⇔' : '⇕'}
-                      <span className="d-none d-md-inline ms-1">{fit === 'contain' ? 'Contain' : fit === 'width' ? 'Ancho' : 'Alto'}</span>
-                    </button>
+                  <div className="toolbar-sep d-none d-sm-block" aria-hidden />
+
+                  {/* Zoom botones */}
+                  <div className="d-flex align-items-center gap-2">
+                    <label className="small text-secondary d-none d-sm-inline" style={{minWidth:42}}>Zoom</label>
+                    <div className="btn-group btn-group-sm" role="group" aria-label={`Zoom de ${t.name}`}>
+                      <button className="btn btn-outline-light" onClick={() => setZoom(t.id, getZoom(t.id) - 0.05)} title="Reducir 5%">−</button>
+                      <button className="btn btn-outline-light" onClick={() => setZoom(t.id, 1)} title="Restablecer al 100%">100%</button>
+                      <button className="btn btn-outline-light" onClick={() => setZoom(t.id, getZoom(t.id) + 0.05)} title="Aumentar 5%">+</button>
+                    </div>
+                    <span className="small text-secondary" style={{width:44, textAlign:'right'}}>{Math.round(getZoom(t.id)*100)}%</span>
                   </div>
 
                   <div className="toolbar-sep d-none d-sm-block" aria-hidden />
@@ -638,8 +612,7 @@ export const DisplayPreview: React.FC<{
                   <div className="toolbar-sep d-none d-sm-block" aria-hidden />
 
                   {/* Grupo 3 */}
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Ventana y recargar">
-                    <a className="btn btn-outline-light" href={url} target={`SIGAD_DISPLAY_${t.id}`} rel="noreferrer" title="Abrir en ventana">↗<span className="d-none d-md-inline ms-1">Ventana</span></a>
+                  <div className="btn-group btn-group-sm" role="group" aria-label="Recargar y cerrar">
                     <button className="btn btn-outline-light" onClick={() => reloadFrame(`prev-exp-${t.id}`)} title="Recargar">↻<span className="d-none d-md-inline ms-1">Recargar</span></button>
                     <button className="btn btn-outline-secondary" onClick={() => setExpandedId(null)} title="Cerrar (Esc)">✕<span className="d-none d-md-inline ms-1">Cerrar</span></button>
                   </div>
@@ -664,7 +637,7 @@ export const DisplayPreview: React.FC<{
                     </div>
                   )}
 
-                  <div onDoubleClick={() => cycleFit(t.id)} style={{ width: w, height: h, overflow: 'hidden', borderRadius: 12, position: 'relative' }}>
+                  <div onDoubleClick={() => setExpandedId(t.id)} style={{ width: w, height: h, overflow: 'hidden', borderRadius: 12, position: 'relative' }}>
                     {/* Micro-HUD superpuesto (overlay) */}
                     <div
                       className="position-absolute d-flex align-items-center gap-2 px-2 py-1"

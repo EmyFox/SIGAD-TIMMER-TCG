@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
-import { emitAll, openDisplayWindow, emitAnnouncement } from "./displayChannel";
+import 'dayjs/locale/es';
+import { emitAll, openDisplayWindow, emitAnnouncement, emitAdvancedAnnouncement } from "./displayChannel";
 import { PanelToastHost, panelNotify } from './notificationsPanel';
 import { useAuth } from './auth';
 import { BrandLogo } from './BrandLogo';
@@ -446,13 +447,14 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
             </div>
 
             {/* Sesión */}
-            <div className="ms-xl-3 d-flex align-items-center gap-2 ms-auto">
+            <div className="ms-xl-3 d-flex flex-column ms-auto" style={{gap:6}}>
               {user && (
-                <div className="btn-group btn-group-sm" role="group" aria-label="Sesion">
+                <div className="btn-group btn-group-sm align-self-end" role="group" aria-label="Sesion">
                   <button className="btn btn-outline-warning" onClick={onLock} title="Bloquear">🔒</button>
                   <button className="btn btn-outline-danger" onClick={onLogout} title="Cerrar sesión">⎋</button>
                 </div>
               )}
+              <button className="btn btn-sm btn-outline-info align-self-end" onClick={onOpenSettings} title="Ajustes (S)">⚙️ Ajustes</button>
             </div>
           </div>
 
@@ -476,7 +478,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
               </div>
 
               <div className="d-flex align-items-center gap-2">
-                <span className="text-secondary small">Cols</span>
+                <span className="text-secondary small">Presentación</span>
                 <div className="btn-group btn-group-sm" role="group" aria-label="Cols">
                   <input type="radio" className="btn-check" name="cols" id="c1"
                          checked={settings.cols===1}
@@ -499,11 +501,9 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
             {/* Acciones rápidas */}
             <div className="vr d-none d-md-block"/>
             <div className="d-flex flex-wrap gap-2">
-              <button className="btn btn-sm btn-outline-warning" onClick={onPauseAll} title="Pausar todos (P / Space)">⏸ Pausar</button>
-              <button className="btn btn-sm btn-outline-success" onClick={onResumeAll} title="Reanudar todos (R / Space)">▶ Reanudar</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={onResetAll} title="Resetear todos">↺ Reset</button>
+              <button className="btn btn-sm btn-outline-danger" onClick={onResetAll} title="Resetear todos">↺ Reset global</button>
               <button className="btn btn-sm btn-primary" onClick={onNew} title="Nuevo (N)">➕ Nuevo</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={onCopySchedule} title="Copiar itinerario">📋 Itinerario</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={onCopySchedule} title="Ver itinerario">📋 Itinerario</button>
 
               {/* Importar/Exportar/Ajustes/Anuncio */}
               <input
@@ -517,9 +517,13 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
                   if(fileInputRef.current) fileInputRef.current.value='';
                 }}
               />
-              <button className="btn btn-sm btn-outline-light" onClick={()=>fileInputRef.current?.click()}>📥 Importar</button>
-              <button className="btn btn-sm btn-outline-light" onClick={onExport}>📤 Exportar</button>
-              <button className="btn btn-sm btn-outline-info" onClick={onOpenSettings} title="Ajustes (S)">⚙️ Ajustes</button>
+              <div className="position-relative">
+                <button className="btn btn-sm btn-outline-light" onClick={(e)=>{e.stopPropagation(); (window as any).__dataMenuOpen = !(window as any).__dataMenuOpen; const el=document.getElementById('data-menu'); if(el){ el.style.display = (window as any).__dataMenuOpen? 'block':'none'; }}}>🗂 Datos</button>
+                <div id="data-menu" className="shadow dropdown-menu p-1" style={{display:'none', position:'absolute', inset:'auto auto 0 0', transform:'translateY(100%)', minWidth:180, background:'#1b1f28', border:'1px solid #2c313a'}}>
+                  <button className="dropdown-item text-start" onClick={()=>{ const el=document.getElementById('data-menu'); if(el) el.style.display='none'; fileInputRef.current?.click(); }}>📥 Importar JSON…</button>
+                  <button className="dropdown-item text-start" onClick={()=>{ const el=document.getElementById('data-menu'); if(el) el.style.display='none'; onExport(); }}>📤 Exportar JSON…</button>
+                </div>
+              </div>
               <AnnouncementBtn pushToast={pushToast as any}/>
             </div>
 
@@ -540,6 +544,8 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
 export const MasterPanel: React.FC = () => {
   const { lock, logout, user } = useAuth();
   useEffect(()=>{ document.documentElement.setAttribute('data-bs-theme','dark'); },[]);
+  // Forzar locale español
+  useEffect(()=>{ try { dayjs.locale('es'); } catch{} }, []);
   const showBrandBg = useMemo(()=>{
     try { return !new URLSearchParams(window.location.search).has('noBrand'); } catch { return true; }
   }, []);
@@ -747,6 +753,7 @@ export const MasterPanel: React.FC = () => {
 
   /* ===== Offcanvas Ajustes ===== */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [itineraryOpen, setItineraryOpen] = useState(false);
 
   /* ===== CRUD ===== */
   const duplicateTournament = useCallback((id: string) => setTournaments(prev => {
@@ -810,7 +817,7 @@ export const MasterPanel: React.FC = () => {
     } catch { pushToast({kind:'warning', text:'Error al copiar'}); }
   };
 
-  const gridClasses = `row g-3 row-cols-1 ${settings.cols===2 ? 'row-cols-xl-2' : ''} ${settings.cols===3 ? 'row-cols-xxl-3' : ''}`.trim();
+  const gridClasses = `row g-3 row-cols-1 ${settings.cols===2 ? 'row-cols-lg-2' : ''} ${settings.cols===3 ? 'row-cols-xl-3' : ''}`.trim();
   const compact = settings.cols === 3;
 
   // Atajos (sin passive:true)
@@ -881,7 +888,7 @@ export const MasterPanel: React.FC = () => {
         onResumeAll={resumeAll}
         onResetAll={resetAll}
         onNew={openCreate}
-        onCopySchedule={copySchedule}
+        onCopySchedule={()=>setItineraryOpen(true)}
         onExport={exportJSON}
         onOpenSettings={()=>setSettingsOpen(true)}
         fileInputRef={fileInputRef}
@@ -893,7 +900,7 @@ export const MasterPanel: React.FC = () => {
       {/* Grid + sidebar preview layout */}
       <main className="container pb-3" style={{maxHeight: 'calc(100vh - 170px)', overflowY: 'auto'}}>
         <div className="row g-3">
-          <div className="col-12 col-xl-9">
+          <div className="col-12 col-xl-8">
             <div className={gridClasses}>
               {tournaments.map(t => (
                 <div className="col" key={t.id}>
@@ -927,7 +934,7 @@ export const MasterPanel: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="col-12 col-xl-3 d-flex flex-column gap-3">
+          <div className="col-12 col-xl-4 d-flex flex-column gap-3">
             <DisplayPreview
               tournaments={tournamentsForPreview}
               timeFmt={settings.timeFmt}
@@ -939,9 +946,10 @@ export const MasterPanel: React.FC = () => {
 
       {/* Offcanvas & Toasts */}
       <TournamentOffcanvas open={canvasOpen} onClose={closeCanvas} onSubmit={submitCanvas} initial={canvasInitial} />
+      <ItineraryModal open={itineraryOpen} onClose={()=>setItineraryOpen(false)} tournaments={tournaments} timeFmt={settings.timeFmt} nowMs={nowMs} />
       <SettingsOffcanvas open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={settings} onChange={(s)=>{ setSettings(s); setSettingsOpen(false); }} />
       <PanelToastHost position="top-right" />
-      <AnnouncementConfigurator />
+      <AnnouncementConfigurator tournaments={tournaments} />
     </>
   );
 };
@@ -986,8 +994,9 @@ const TournamentCard: React.FC<{
   const colStat = compact ? "col-6" : "col-6 col-lg-3";
   const colSmall3 = compact ? "col-6" : "col-6 col-sm-3";
   const colHalf = compact ? "col-12" : "col-12 col-sm-6";
-  const nameInputClass = `form-control ${compact ? "" : "form-control-lg"} fw-semibold`;
-  const timerFontSize = compact ? '1.75rem' : '2.25rem';
+  const nameInputClass = `form-control ${compact ? "" : ""} fw-semibold`;
+  // Reduce timer font size a bit to make cards denser
+  const timerFontSize = compact ? '1.5rem' : '1.9rem';
 
   // Botones
   const smallBtn = "btn btn-sm";
@@ -995,6 +1004,12 @@ const TournamentCard: React.FC<{
 
   return (
     <article className="card h-100 bg-body border-0 shadow-sm" style={{borderLeft: `6px solid ${colorCss}`, minWidth: 0}}>
+      {/* Progreso arriba con texto */}
+      <div className="progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+        <div className="progress-bar" style={{width: `${progress}%`, backgroundColor: colorCss}}>
+          <span className="visually-hidden">{progress}%</span>
+        </div>
+      </div>
       {/* Cabecera compacta */}
       <header className="card-header bg-body border-0 py-2" style={{ minWidth: 0 }}>
         <div className="d-flex align-items-center gap-2 flex-wrap" style={{ minWidth: 0 }}>
@@ -1003,20 +1018,94 @@ const TournamentCard: React.FC<{
             {t.timer.mode==='break'? 'Break' : 'Ronda'} • {inRound ? currentIndex : Math.min(currentIndex + 1, t.roundsTotal)} / {t.roundsTotal}
           </span>
 
-          <div className="ms-auto d-flex gap-1 flex-wrap">
+          <div className="ms-auto d-flex gap-1 flex-wrap align-items-center">
             <button className="btn btn-sm btn-outline-light" onClick={onEdit} title="Editar">✎</button>
-            <button className={`btn btn-sm ${isDisplayOpen ? 'btn-secondary' : 'btn-outline-light'}`} onClick={openDisplay} title="Display">🖥</button>
+            <button
+              className={`btn btn-sm ${isDisplayOpen ? 'btn-success' : 'btn-primary'}`}
+              onClick={openDisplay}
+              title="Ver display"
+            >
+              🖥 <span className="ms-1">Ver display</span>{isDisplayOpen && <span className="ms-1 d-none d-lg-inline">· Abierto</span>}
+            </button>
             <button className="btn btn-sm btn-outline-light" onClick={duplicate} title="Duplicar">⧉</button>
             <button className="btn btn-sm btn-outline-danger" onClick={remove} title="Eliminar">🗑</button>
           </div>
         </div>
       </header>
 
-      <div className="card-body d-flex flex-column gap-3">
+  <div className="card-body d-flex flex-column gap-3 text-center">
         <input aria-label="Nombre del torneo" className={nameInputClass} value={t.name} onChange={e=>onChange({ name: e.target.value })} />
 
-        {/* Stats */}
-        <div className="row g-2 align-items-end">
+        {/* ===== Controles prioritarios ===== */}
+  <div className="border rounded p-2" style={{backgroundColor: 'var(--bs-body-secondary-bg)'}}>
+          {/* Estado: sin iniciar */}
+          {(!t.timer.running && t.timer.target === null) && (
+            <>
+              <div className="d-flex flex-wrap gap-2 mb-2">
+                <button className={`${mainBtn} btn-primary px-3 py-2`} onClick={()=>startRound()}>▶ Iniciar</button>
+                {t.breakEnabled && t.breakMinutes>0 && (
+                  <button className={`${mainBtn} btn-outline-primary px-3 py-2`} onClick={startBreak}>☕ Break</button>
+                )}
+              </div>
+              <div className="d-flex flex-wrap gap-1">
+                <div className="btn-group btn-group-sm" role="group" aria-label="Inicio rápido">
+                  {[30,40,45,50,60].map(m=> (
+                    <button key={m} className="btn btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Estado: corriendo */}
+          {t.timer.running && (
+            <>
+              <div className="d-flex flex-wrap gap-2 mb-2">
+                <button className={`${mainBtn} btn-warning px-3 py-2`} onClick={pause}>⏸ Pausar</button>
+              </div>
+              <div className="btn-group btn-group-sm" role="group" aria-label="Ajustar tiempo">
+                <button className="btn btn-outline-danger" onClick={sub5}>−5m</button>
+                <button className="btn btn-outline-danger" onClick={sub1}>−1m</button>
+                <button className="btn btn-outline-success" onClick={add1}>+1m</button>
+                <button className="btn btn-outline-success" onClick={add5}>+5m</button>
+              </div>
+            </>
+          )}
+
+          {/* Estado: pausado */}
+          {!t.timer.running && t.timer.target !== null && remainingMs > 0 && (
+            <div className="d-flex flex-wrap gap-2">
+              <button className={`${mainBtn} btn-success px-4`} onClick={resume}>▶ Reanudar</button>
+              <button className={`${mainBtn} btn-outline-secondary px-4`} onClick={reset}>↺ Reset</button>
+            </div>
+          )}
+
+          {/* En break */}
+          {t.timer.mode==='break' && (
+            <div className="d-flex flex-wrap gap-2">
+              <button className={`${mainBtn} btn-secondary px-4`} onClick={skipBreak}>⏭ Omitir break</button>
+            </div>
+          )}
+        </div>
+
+        {/* ===== Controles de ronda ===== */}
+            <div className="border rounded p-1" style={{backgroundColor: 'var(--bs-body-tertiary-bg)'}}>
+          <div className="d-flex flex-wrap gap-2 justify-content-center">
+            <button className={`${smallBtn} btn-outline-primary`} onClick={restartRound} title="Reiniciar ronda actual">⟲ Reiniciar</button>
+            <button className={`${smallBtn} btn-outline-secondary`} onClick={prevRound} disabled={t.roundsCompleted<=0} title="Volver a ronda anterior">↩ Atrás</button>
+            <button className={`${smallBtn} btn-outline-success`} onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal} title="Marcar ronda como completada">✅ Fin</button>
+            <button className={`${smallBtn} btn-success`} onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal} title="Avanzar a siguiente ronda">⏭ Sig.</button>
+            <button className={`${smallBtn} btn-outline-info`} onClick={()=>{
+              const inp = prompt('Minutos nuevos (reemplaza el timer actual):');
+              if (!inp) return; const v = Number(inp);
+              if (!Number.isFinite(v) || v<=0) return;
+              startRound(v, v+ 'm manual');
+            }} title="Establecer tiempo personalizado">✎ Set</button>
+          </div>
+        </div>
+
+    {/* Stats centradas */}
+      <div className="row g-1 align-items-end justify-content-center text-center">
           <div className={colStat}>
             <div className="text-secondary small">Estado</div>
             <div className="fw-bold text-info text-truncate">{expired ? 'Terminado' : t.timer.running ? 'En curso' : t.timer.target ? 'Pausado' : 'Sin iniciar'}</div>
@@ -1039,66 +1128,69 @@ const TournamentCard: React.FC<{
           </div>
         </div>
 
-        {/* Config rápida */}
-        <div className="row g-2">
-          <div className={colSmall3}>
-            <label className="form-label small mb-1">Rondas</label>
-            <input type="number" className="form-control" value={t.roundsTotal} min={1}
-                   onChange={e=>onChange({ roundsTotal: Math.max(1, Number(e.target.value)), roundsCompleted: Math.min(t.roundsCompleted, Math.max(1, Number(e.target.value))) })} />
+        {/* Config rápida (colapsable) */}
+        <details>
+          <summary className="pointer" style={{listStyle:'none'}}>
+            <span className="btn btn-sm btn-outline-info w-100 text-start">⚙️ Configuración de rondas</span>
+          </summary>
+          <div className="mt-2 p-2 border rounded" style={{background:'var(--bs-body-tertiary-bg)'}}>
+            <div className="row g-2">
+              <div className="col-6 col-sm-3">
+                <label className="form-label small mb-1">Rondas</label>
+                <input type="number" className="form-control" value={t.roundsTotal} min={1}
+                       onChange={e=>onChange({ roundsTotal: Math.max(1, Number(e.target.value)), roundsCompleted: Math.min(t.roundsCompleted, Math.max(1, Number(e.target.value))) })} />
+              </div>
+              <div className="col-6 col-sm-3">
+                <label className="form-label small mb-1">Completadas</label>
+                <input type="number" className="form-control" value={t.roundsCompleted} min={0} max={t.roundsTotal}
+                       onChange={e=>onChange({ roundsCompleted: Math.min(Math.max(0, Number(e.target.value)), t.roundsTotal) })} />
+              </div>
+              <div className="col-6 col-sm-3">
+                <label className="form-label small mb-1">Min/Ronda</label>
+                <input type="number" className="form-control" value={t.roundMinutes} min={1}
+                       onChange={e=>onChange({ roundMinutes: Math.max(1, Number(e.target.value)) })} />
+              </div>
+              <div className="col-6 col-sm-3">
+                <label className="form-label small mb-1">Min próxima</label>
+                <input type="number" className="form-control" value={t.nextRoundMinutes ?? 0} min={0}
+                       onChange={e=>{ const v=Number(e.target.value); onChange({ nextRoundMinutes: v>0? v : null }); }} />
+              </div>
+            </div>
+            <div className="row g-2 mt-1">
+              <div className="col-12 col-sm-6">
+                <div className="form-check form-switch">
+                  <input className="form-check-input" type="checkbox" id={`break-${t.id}`} checked={t.breakEnabled} onChange={e=>onChange({ breakEnabled: e.target.checked })} />
+                  <label className="form-check-label" htmlFor={`break-${t.id}`}>Habilitar break</label>
+                </div>
+              </div>
+              <div className="col-6 col-sm-3">
+                <label className="form-label small mb-1">Break (min)</label>
+                <input type="number" className="form-control" value={t.breakMinutes} min={0} disabled={!t.breakEnabled}
+                       onChange={e=>onChange({ breakMinutes: Math.max(0, Number(e.target.value)) })} />
+              </div>
+              <div className="col-6 col-sm-3">
+                <div className="form-check form-switch mt-4">
+                  <input className="form-check-input" type="checkbox" id={`auto-${t.id}`} checked={t.autoStartNext} onChange={e=>onChange({ autoStartNext: e.target.checked })} />
+                  <label className="form-check-label" htmlFor={`auto-${t.id}`}>Auto siguiente</label>
+                </div>
+              </div>
+            </div>
+            <div className="row g-2 mt-1">
+              <div className="col-12 col-md-8">
+                <label className="form-label small mb-1">Tema del Display</label>
+                <div className="d-flex gap-2">
+                  <select className="form-select" style={{maxWidth:220}} value={t.displayTheme||'dark'} onChange={e=>onChange({ displayTheme: e.target.value as 'dark'|'light' })}>
+                    <option value="dark">Oscuro</option>
+                    <option value="light">Luz (claro)</option>
+                  </select>
+                  <button className={`${smallBtn} btn-outline-secondary`} onClick={()=>onChange({ displayTheme: (t.displayTheme||'dark')==='dark'?'light':'dark' })}>Alternar</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className={colSmall3}>
-            <label className="form-label small mb-1">Completadas</label>
-            <input type="number" className="form-control" value={t.roundsCompleted} min={0} max={t.roundsTotal}
-                   onChange={e=>onChange({ roundsCompleted: Math.min(Math.max(0, Number(e.target.value)), t.roundsTotal) })} />
-          </div>
-          <div className={colSmall3}>
-            <label className="form-label small mb-1">Min/Ronda</label>
-            <input type="number" className="form-control" value={t.roundMinutes} min={1}
-                   onChange={e=>onChange({ roundMinutes: Math.max(1, Number(e.target.value)) })} />
-          </div>
-          <div className={colSmall3}>
-            <label className="form-label small mb-1">Min próxima</label>
-            <input type="number" className="form-control" value={t.nextRoundMinutes ?? 0} min={0}
-                   onChange={e=>{ const v=Number(e.target.value); onChange({ nextRoundMinutes: v>0? v : null }); }} />
-          </div>
-        </div>
+        </details>
 
-        <div className="row g-2">
-          <div className={colHalf}>
-            <div className="form-check form-switch">
-              <input className="form-check-input" type="checkbox" id={`break-${t.id}`} checked={t.breakEnabled} onChange={e=>onChange({ breakEnabled: e.target.checked })} />
-              <label className="form-check-label" htmlFor={`break-${t.id}`}>Habilitar break</label>
-            </div>
-          </div>
-          <div className="col-6 col-sm-3">
-            <label className="form-label small mb-1">Break (min)</label>
-            <input type="number" className="form-control" value={t.breakMinutes} min={0} disabled={!t.breakEnabled}
-                   onChange={e=>onChange({ breakMinutes: Math.max(0, Number(e.target.value)) })} />
-          </div>
-          <div className="col-6 col-sm-3">
-            <div className="form-check form-switch mt-4">
-              <input className="form-check-input" type="checkbox" id={`auto-${t.id}`} checked={t.autoStartNext} onChange={e=>onChange({ autoStartNext: e.target.checked })} />
-              <label className="form-check-label" htmlFor={`auto-${t.id}`}>Auto siguiente</label>
-            </div>
-          </div>
-          <div className={colHalf}>
-            <label className="form-label small mb-1">Tema del Display</label>
-            <div className="d-flex gap-2">
-              <select className="form-select" style={{maxWidth:220}} value={t.displayTheme||'dark'} onChange={e=>onChange({ displayTheme: e.target.value as 'dark'|'light' })}>
-                <option value="dark">Oscuro</option>
-                <option value="light">Luz (claro)</option>
-              </select>
-              <button className={`${smallBtn} btn-outline-secondary`} onClick={()=>onChange({ displayTheme: (t.displayTheme||'dark')==='dark'?'light':'dark' })}>
-                Alternar
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Progreso de fase */}
-        <div className="progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-          <div className="progress-bar" style={{width: `${progress}%`, backgroundColor: colorCss}}></div>
-        </div>
+        {/* Progreso movido arriba */}
 
         {/* Próximos hitos */}
         {sch.length > 0 && (
@@ -1114,72 +1206,6 @@ const TournamentCard: React.FC<{
           <summary className="small text-secondary pointer">📝 Notas</summary>
           <textarea className="form-control mt-1" rows={3} maxLength={2000} value={t.notes || ''} placeholder="Notas del organizador..." onChange={e=>onChange({notes: e.target.value})}></textarea>
         </details>
-
-        {/* ===== Controles prioritarios en GRANDE ===== */}
-        <div className="mt-auto d-flex flex-column gap-2">
-          {/* Estado: sin iniciar */}
-          {(!t.timer.running && t.timer.target === null) && (
-            <>
-              <div className="d-flex flex-wrap gap-2">
-                <button className={`${mainBtn} btn-primary px-4`} onClick={()=>startRound()}>▶ Iniciar</button>
-                {t.breakEnabled && t.breakMinutes>0 && (
-                  <button className={`${mainBtn} btn-outline-light px-4`} onClick={startBreak}>☕ Break</button>
-                )}
-              </div>
-              <div className="d-flex flex-wrap gap-1">
-                <div className="btn-group btn-group-sm" role="group" aria-label="Rápido">
-                  {[30,40,45,50,60].map(m=> (
-                    <button key={m} className="btn btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Estado: corriendo */}
-          {t.timer.running && (
-            <>
-              <div className="d-flex flex-wrap gap-2">
-                <button className={`${mainBtn} btn-warning px-4`} onClick={pause}>⏸ Pausar</button>
-              </div>
-              <div className="btn-group btn-group-sm" role="group">
-                <button className="btn btn-outline-light" onClick={sub5}>−5m</button>
-                <button className="btn btn-outline-light" onClick={sub1}>−1m</button>
-                <button className="btn btn-outline-light" onClick={add1}>+1m</button>
-                <button className="btn btn-outline-light" onClick={add5}>+5m</button>
-              </div>
-            </>
-          )}
-
-          {/* Estado: pausado */}
-          {!t.timer.running && t.timer.target !== null && remainingMs > 0 && (
-            <div className="d-flex flex-wrap gap-2">
-              <button className={`${mainBtn} btn-success px-4`} onClick={resume}>▶ Reanudar</button>
-              <button className={`${mainBtn} btn-outline-light px-4`} onClick={reset}>↺ Reset</button>
-            </div>
-          )}
-
-          {/* En break */}
-          {t.timer.mode==='break' && (
-            <div className="d-flex flex-wrap gap-2">
-              <button className={`${mainBtn} btn-secondary px-4`} onClick={skipBreak}>⏭ Omitir break</button>
-            </div>
-          )}
-
-          {/* Acciones secundarias */}
-          <div className="d-flex flex-wrap gap-2 justify-content-end">
-            <button className={`${smallBtn} btn-outline-light`} onClick={restartRound}>⟲ Reiniciar</button>
-            <button className={`${smallBtn} btn-secondary`} onClick={prevRound} disabled={t.roundsCompleted<=0}>↩ Atrás</button>
-            <button className={`${smallBtn} btn-secondary`} onClick={completeRound} disabled={t.roundsCompleted >= t.roundsTotal}>✅ Fin</button>
-            <button className={`${smallBtn} btn-dark border`} onClick={nextRound} disabled={t.roundsCompleted >= t.roundsTotal}>⏭ Sig.</button>
-            <button className={`${smallBtn} btn-outline-secondary`} onClick={()=>{
-              const inp = prompt('Minutos nuevos (reemplaza el timer actual):');
-              if (!inp) return; const v = Number(inp);
-              if (!Number.isFinite(v) || v<=0) return;
-              startRound(v, v+ 'm manual');
-            }}>✎ Set</button>
-          </div>
-        </div>
       </div>
     </article>
   );
@@ -1191,6 +1217,50 @@ export const App: React.FC = () => (
     <MasterPanel />
   </ErrorBoundary>
 );
+
+/* =================== Itinerary Modal =================== */
+const ItineraryModal: React.FC<{ open: boolean; onClose: ()=>void; tournaments: Tournament[]; timeFmt: TimeFmt; nowMs: number }>=({open,onClose,tournaments,timeFmt,nowMs})=>{
+  if(!open) return null;
+  const lines: string[] = [];
+  tournaments.forEach(t => {
+    const { inRound, currentIndex } = computeRoundsInfo(t);
+    const estado = (!t.timer.running && t.timer.target !== null && getRemainingMs(t, nowMs) <= 0) ? 'Terminado' : t.timer.running ? 'En curso' : t.timer.target ? 'Pausado' : 'Sin iniciar';
+    const fase = t.timer.mode==='break' ? 'Break' : (inRound ? `Ronda ${currentIndex}` : `Ronda ${Math.min(currentIndex+1, t.roundsTotal)}`);
+    const eta = computeETAClock(t, timeFmt, nowMs);
+    const objetivo = t.timer.target ? dayjs(t.timer.target).format(fmtClock(timeFmt)) : '-';
+    const sch = computeSchedule(t, timeFmt, nowMs);
+    lines.push(`${t.name} (${t.game})`);
+    lines.push(`  • Estado: ${estado}`);
+    lines.push(`  • Fase: ${fase}`);
+    lines.push(`  • Timer: ${format(getRemainingMs(t, nowMs))} (objetivo: ${objetivo})`);
+    lines.push(`  • ETA fin de torneo: ${eta}`);
+    if (sch.length) {
+      lines.push(`  • Próximos hitos:`);
+      sch.forEach(s => lines.push(`    - ${s.label}: ${s.time}`));
+    }
+    if (t.notes && t.notes.trim()) lines.push(`  • Notas: ${t.notes.trim()}`);
+    lines.push('');
+  });
+  const content = lines.join('\n');
+  const copy = async () => {
+    try{ await navigator.clipboard.writeText(content); }catch{}
+  };
+  return (
+    <div style={{position:'fixed', inset:0, zIndex:2600, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog">
+      <div onClick={onClose} style={{position:'absolute', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(2px)'}} />
+      <div className="shadow-lg" style={{position:'relative', width:'min(840px, 92%)', background:'#12141a', border:'1px solid #2c313a', borderRadius:12, padding:'1rem'}}>
+        <div className="d-flex align-items-center mb-2">
+          <h5 className="m-0">Itinerario</h5>
+          <div className="ms-auto d-flex gap-2">
+            <button className="btn btn-sm btn-outline-secondary" onClick={copy}>📋 Copiar</button>
+            <button className="btn btn-sm btn-outline-light" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+        <textarea className="form-control" readOnly rows={16} value={content} style={{fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'}} />
+      </div>
+    </div>
+  );
+};
 
 /* =================== Anuncio avanzado =================== */
 interface AnnouncementDraft { text: string; kind: 'info'|'warn'|'success'; duration: number; color: string; sound: boolean; }
@@ -1205,16 +1275,150 @@ const AnnouncementButton: React.FC<{ pushToast: (t: {kind:any; text:string; icon
   );
 };
 
-const AnnouncementConfigurator: React.FC = () => {
+const AnnouncementConfigurator: React.FC<{ tournaments: Tournament[] }> = ({ tournaments }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<AnnouncementDraft>(defaultAnnouncement);
+  // Advanced fields
+  const [targets, setTargets] = useState<string[]>([]);
+  const [kind, setKind] = useState<'text'|'image'|'url'>('text');
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [imageSizeKB, setImageSizeKB] = useState<number | null>(null);
+  const [imageCaption, setImageCaption] = useState<string>("");
+  // Cropper state
+  const [rawImageUrl, setRawImageUrl] = useState<string | null>(null);
+  const [rawDim, setRawDim] = useState<{ w:number; h:number } | null>(null);
+  const [cropAspect, setCropAspect] = useState<'1:1'|'4:3'|'3:4'>('1:1');
+  const [zoom, setZoom] = useState<number>(1);
+  const [pan, setPan] = useState<{x:number;y:number}>({x:0,y:0});
+  const [drag, setDrag] = useState<{active:boolean;x:number;y:number}>({active:false,x:0,y:0});
+  const [cropMode, setCropMode] = useState(false);
+  const [urlPayload, setUrlPayload] = useState<string>('');
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [showUrlPreview, setShowUrlPreview] = useState(false);
+  const [persistent, setPersistent] = useState(false);
+  const [interactive, setInteractive] = useState(false);
+
+  const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB
+
+  // Helpers: compute bytes of a data URL
+  const dataUrlBytes = (d: string) => {
+    try {
+      const i = d.indexOf(',');
+      const b64 = i >= 0 ? d.slice(i + 1) : d;
+      return Math.floor((b64.length * 3) / 4) - (b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0);
+    } catch { return d.length; }
+  };
+  // Client-side image compression/downscaling
+  const compressImageToDataURL = async (src: HTMLImageElement | ImageBitmap, opts?: { maxDim?: number; quality?: number }): Promise<string> => {
+    const maxDim = opts?.maxDim ?? 1024;
+    const quality = opts?.quality ?? 0.85;
+    const w = (src as any).width as number; const h = (src as any).height as number;
+    let nw = w, nh = h;
+    if (Math.max(w, h) > maxDim) {
+      const scale = maxDim / Math.max(w, h);
+      nw = Math.max(1, Math.round(w * scale));
+      nh = Math.max(1, Math.round(h * scale));
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas error');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src as any, 0, 0, nw, nh);
+    // Prefer JPEG to reduce size; transparency will be flattened
+    let q = quality;
+    let out = canvas.toDataURL('image/jpeg', q);
+    // Try a second pass if still too big
+    if (dataUrlBytes(out) > MAX_IMAGE_BYTES) {
+      q = 0.7; out = canvas.toDataURL('image/jpeg', q);
+    }
+    return out;
+  };
+
+  // Load raw image dimensions when selecting
+  useEffect(()=>{
+    if(!rawImageUrl){ setRawDim(null); return; }
+    const img = new Image();
+    img.onload = () => { setRawDim({ w: img.width, h: img.height }); };
+    img.onerror = () => { setRawDim(null); setImageError('No se pudo cargar la imagen'); };
+    img.src = rawImageUrl;
+    return () => { try { URL.revokeObjectURL(rawImageUrl); } catch {} };
+  }, [rawImageUrl]);
+
+  const viewport = useMemo(()=>{
+    // UI crop viewport size in px (preview scale, not output)
+    if (cropAspect === '1:1') return { w: 320, h: 320 };
+    if (cropAspect === '4:3') return { w: 320, h: 240 };
+    return { w: 240, h: 320 }; // 3:4
+  }, [cropAspect]);
+
+  const fitScale = useMemo(()=>{
+    if(!rawDim) return 1;
+    const { w:rw, h:rh } = rawDim;
+    return Math.max(viewport.w / rw, viewport.h / rh);
+  }, [rawDim, viewport]);
+
+  const clampPan = useCallback((p:{x:number;y:number}, z:number)=>{
+    if(!rawDim) return p;
+    const s = fitScale * z;
+    const maxX = Math.max(0, (s * rawDim.w - viewport.w) / 2);
+    const maxY = Math.max(0, (s * rawDim.h - viewport.h) / 2);
+    return { x: Math.max(-maxX, Math.min(maxX, p.x)), y: Math.max(-maxY, Math.min(maxY, p.y)) };
+  }, [rawDim, fitScale, viewport]);
+
+  // Produce cropped dataURL with chosen aspect and approximately 1024 max side
+  const applyCrop = useCallback(async ()=>{
+    if(!rawImageUrl || !rawDim) return;
+    const img = new Image();
+    await new Promise<void>((res, rej)=>{ img.onload=()=>res(); img.onerror=rej; img.src = rawImageUrl; });
+    const s = fitScale * zoom;
+    const srcW = viewport.w / s;
+    const srcH = viewport.h / s;
+    const x0 = rawDim.w/2 + (-viewport.w/2 - pan.x) / s;
+    const y0 = rawDim.h/2 + (-viewport.h/2 - pan.y) / s;
+    // Clamp source rect within image bounds
+    const sx = Math.max(0, Math.min(rawDim.w - srcW, x0));
+    const sy = Math.max(0, Math.min(rawDim.h - srcH, y0));
+    // Output size
+    const outMax = 1024;
+    const aspect = cropAspect === '1:1' ? 1 : (cropAspect === '4:3' ? 4/3 : 3/4);
+    let outW = outMax, outH = Math.round(outMax / aspect);
+    if (cropAspect === '3:4') { outH = outMax; outW = Math.round(outMax * aspect); }
+    const canvas = document.createElement('canvas');
+    canvas.width = outW; canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    if(!ctx) return;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, srcW, srcH, 0, 0, outW, outH);
+    let out = canvas.toDataURL('image/jpeg', 0.85);
+    if (dataUrlBytes(out) > MAX_IMAGE_BYTES) {
+      out = canvas.toDataURL('image/jpeg', 0.7);
+    }
+    setImageDataUrl(out);
+    setImageSizeKB(Math.round(dataUrlBytes(out)/1024));
+    setCropMode(false);
+    setImageError(null);
+  }, [rawImageUrl, rawDim, fitScale, zoom, viewport, pan, cropAspect]);
+
   announcementState.setOpen = setOpen;
   announcementState.submit = (d) => setDraft(d);
   useEffect(()=>{ if(open) setDraft(announcementState.draft); },[open]);
-  const close = () => { announcementState.open = false; setOpen(false); };
-  const send = () => {
-    if(!draft.text.trim()) return close();
-    emitAnnouncement(`[${draft.kind.toUpperCase()}] ${draft.text}`, draft.kind==='warn'?'warn': draft.kind==='success'?'success':'info', draft.duration);
+  const close = () => { announcementState.open = false; setOpen(false); if(rawImageUrl){ try { URL.revokeObjectURL(rawImageUrl); } catch {} } setImageDataUrl(null); setImageCaption(''); setUrlPayload(''); setTargets([]); setKind('text'); setPersistent(false); setRawImageUrl(null); setRawDim(null); setCropMode(false); setPan({x:0,y:0}); setZoom(1); };
+  const send = async () => {
+    // Validation depending on kind
+    if (kind === 'text') {
+      if (!draft.text.trim()) return; // nothing
+      emitAdvancedAnnouncement({ targets: targets.length ? targets : undefined, kind: 'text', payload: { text: draft.text }, persistent, duration: draft.duration });
+    } else if (kind === 'image') {
+      if (!imageDataUrl || imageError) return;
+      const caption = imageCaption && imageCaption.trim() ? imageCaption.trim() : undefined;
+      emitAdvancedAnnouncement({ targets: targets.length ? targets : undefined, kind: 'image', payload: { imageDataUrl, imageAspect: cropAspect, ...(caption ? { text: caption } : {}) }, persistent });
+    } else if (kind === 'url') {
+      if (!urlPayload.trim() || urlError) return;
+      emitAdvancedAnnouncement({ targets: targets.length ? targets : undefined, kind: 'url', payload: { url: urlPayload, interactive }, persistent });
+    }
+
     if(draft.sound){ try { const ctx = new (window.AudioContext || (window as any).webkitAudioContext)(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.frequency.value = draft.kind==='warn'? 520 : draft.kind==='success'? 660 : 440; gain.gain.value = 0.08; osc.connect(gain).connect(ctx.destination); osc.start(); setTimeout(()=>osc.stop(), 260); } catch{} }
     close();
   };
@@ -1225,17 +1429,154 @@ const AnnouncementConfigurator: React.FC = () => {
   return (
     <div style={{position:'fixed', inset:0, zIndex:2500, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog">
       <div onClick={close} style={{position:'absolute', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(2px)'}} />
-      <div className="shadow-lg" style={{position:'relative', width:'min(640px, 92%)', background:'#12141a', border:'1px solid #2c313a', borderTop:`4px solid ${draft.color}`, borderRadius:12, padding:'1.25rem 1.25rem 1rem'}}>
-        <div className="d-flex align-items-center mb-2">
+      <div className="shadow-lg d-flex flex-column" style={{position:'relative', width:'min(760px, 94%)', maxHeight:'90vh', background:'#12141a', border:'1px solid #2c313a', borderTop:`4px solid ${draft.color}`, borderRadius:12}}>
+        <div className="d-flex align-items-center px-3 py-2" style={{position:'sticky', top:0, background:'#12141a', zIndex:1}}>
           <h5 className="m-0">Anuncio público</h5>
           <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={close}>✕</button>
         </div>
-        <div className="mb-3">
-          <label className="form-label">Mensaje</label>
-          <textarea className="form-control" maxLength={500} rows={3} value={draft.text} onChange={e=>setDraft(d=>({...d, text:e.target.value}))} />
-          <div className="form-text text-secondary">Máx 500 caracteres</div>
-        </div>
-        <div className="row g-2">
+        <div className="px-3 py-2 overflow-auto" style={{flex:'1 1 auto'}}>
+          <label className="form-label">Tipo de anuncio</label>
+          <div className="d-flex gap-2">
+            <select className="form-select" value={kind} onChange={e=>setKind(e.target.value as any)} style={{maxWidth:240}}>
+              <option value="text">Texto</option>
+              <option value="image">Imagen 1:1</option>
+              <option value="url">URL (iframe)</option>
+            </select>
+
+            <div className="form-check form-switch align-self-center">
+              <input className="form-check-input" type="checkbox" id="ann-persistent" checked={persistent} onChange={e=>setPersistent(e.target.checked)} />
+              <label className="form-check-label small" htmlFor="ann-persistent">Persistente</label>
+            </div>
+          </div>
+        
+        {kind === 'text' && (
+          <div className="mt-2">
+            <label className="form-label">Mensaje</label>
+            <textarea className="form-control" maxLength={500} rows={3} value={draft.text} onChange={e=>setDraft(d=>({...d, text:e.target.value}))} />
+            <div className="form-text text-secondary">Máx 500 caracteres</div>
+          </div>
+        )}
+
+        {kind === 'image' && (
+          <div className="mt-2">
+            <label className="form-label">Texto debajo (opcional)</label>
+            <input className="form-control" placeholder="Título / leyenda del anuncio" value={imageCaption} onChange={e=>setImageCaption(e.target.value)} maxLength={140} />
+            <div className="form-text text-secondary">Se mostrará debajo de la imagen en el display.</div>
+          </div>
+        )}
+
+        {kind === 'image' && (
+          <div className="mt-2">
+            <label className="form-label">Imagen (recortar antes de enviar)</label>
+            <input type="file" accept="image/*" className="form-control" onChange={async (e)=>{
+              setImageError(null);
+              setImageDataUrl(null);
+              setImageSizeKB(null);
+              const f = e.target.files?.[0]; if(!f) return;
+              try {
+                if(rawImageUrl){ try { URL.revokeObjectURL(rawImageUrl); } catch {} }
+                const url = URL.createObjectURL(f);
+                setRawImageUrl(url);
+                setCropMode(true);
+                setZoom(1); setPan({x:0,y:0});
+              } catch (err) {
+                setImageError('Error al leer la imagen');
+              }
+            }} />
+            <div className="form-text text-secondary">Elige una imagen y ajusta el recorte con 1:1, 4:3 (H) o 3:4 (V). Se exporta como JPEG optimizado.</div>
+            {imageError && <div className="text-danger small mt-1">{imageError}</div>}
+            {/* Cropper UI */}
+            {cropMode && rawImageUrl && (
+              <div className="mt-2">
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <label className="form-label m-0">Aspecto</label>
+                  <select className="form-select" style={{maxWidth:180}} value={cropAspect} onChange={e=>{ const v=e.target.value as any; setCropAspect(v); setPan({x:0,y:0}); setZoom(1); }}>
+                    <option value="1:1">1:1 (cuadrado)</option>
+                    <option value="4:3">4:3 (horizontal)</option>
+                    <option value="3:4">3:4 (vertical)</option>
+                  </select>
+                  <div className="ms-auto small text-secondary">Rueda para zoom • Arrastra para mover</div>
+                </div>
+                <div
+                  style={{ width: viewport.w, height: viewport.h, overflow:'hidden', border:'1px solid #2c313a', borderRadius:8, background:'#0b0d12', position:'relative', touchAction:'none' }}
+                  onMouseDown={(e)=>{ e.preventDefault(); setDrag({active:true, x:e.clientX, y:e.clientY}); }}
+                  onMouseMove={(e)=>{ if(!drag.active) return; const dx=e.clientX-drag.x; const dy=e.clientY-drag.y; const next = clampPan({ x: pan.x + dx, y: pan.y + dy }, zoom); setPan(next); setDrag({active:true, x:e.clientX, y:e.clientY}); }}
+                  onMouseUp={()=>setDrag(d=>({...d, active:false}))}
+                  onMouseLeave={()=>setDrag(d=>({...d, active:false}))}
+                  onTouchStart={(e)=>{ const t=e.touches[0]; setDrag({active:true, x:t.clientX, y:t.clientY}); }}
+                  onTouchMove={(e)=>{ if(!drag.active) return; const t=e.touches[0]; const dx=t.clientX-drag.x; const dy=t.clientY-drag.y; const next = clampPan({ x: pan.x + dx, y: pan.y + dy }, zoom); setPan(next); setDrag({active:true, x:t.clientX, y:t.clientY}); }}
+                  onTouchEnd={()=>setDrag(d=>({...d, active:false}))}
+                  onWheel={(e)=>{ e.preventDefault(); const delta = Math.sign(e.deltaY); const step = 0.1; const next = Math.min(3, Math.max(1, zoom + (delta < 0 ? step : -step))); setZoom(next); setPan(p=>clampPan(p, next)); }}
+                >
+                  {/* Máscara oscura alrededor del marco */}
+                  <div aria-hidden style={{position:'absolute', inset:0, pointerEvents:'none', boxShadow:'0 0 0 20000px rgba(0,0,0,.45) inset'}} />
+                  {/* Cuadrícula 3x3 para referencia */}
+                  <div aria-hidden style={{position:'absolute', inset:0, display:'grid', gridTemplateColumns:'repeat(3,1fr)', gridTemplateRows:'repeat(3,1fr)', pointerEvents:'none'}}>
+                    {Array.from({length:4}).map((_,i)=> (
+                      <div key={`v${i}`} style={{position:'absolute', left:`${(i)*25}%`, top:0, bottom:0, width:i===0||i===4?0:1, background:'rgba(255,255,255,.08)'}} />
+                    ))}
+                    {Array.from({length:4}).map((_,i)=> (
+                      <div key={`h${i}`} style={{position:'absolute', top:`${(i)*25}%`, left:0, right:0, height:i===0||i===4?0:1, background:'rgba(255,255,255,.08)'}} />
+                    ))}
+                  </div>
+                  <img
+                    src={rawImageUrl}
+                    alt="to-crop"
+                    draggable={false}
+                    style={{ position:'absolute', left:'50%', top:'50%', transform:`translate(-50%,-50%) translate(${pan.x}px, ${pan.y}px) scale(${fitScale*zoom})`, transformOrigin:'center center', userSelect:'none', pointerEvents:'none' }}
+                  />
+                </div>
+                <div className="d-flex align-items-center gap-2 mt-2">
+                  <span className="small text-secondary">Zoom</span>
+                  <input type="range" min={1} max={3} step={0.01} value={zoom} onChange={e=>{ const z=Number(e.target.value); setZoom(z); setPan(p=>clampPan(p,z)); }} style={{flex:'1 1 auto'}} />
+                  <button className="btn btn-sm btn-outline-secondary" type="button" onClick={()=>{ setZoom(1); setPan({x:0,y:0}); }}>Reset</button>
+                  <button className="btn btn-sm btn-primary" type="button" onClick={applyCrop} disabled={!rawDim}>Aplicar recorte</button>
+                </div>
+              </div>
+            )}
+            {/* Preview */}
+            {imageDataUrl && (
+              <div className="mt-3 d-flex flex-column align-items-center">
+                <div style={{display:'flex', justifyContent:'center'}}>
+                  <img src={imageDataUrl} alt="preview" style={{width: cropAspect==='3:4'?90:120, height: cropAspect==='4:3'?90:120, objectFit:'cover', borderRadius:6}} />
+                </div>
+                {imageSizeKB !== null && <div className="small text-secondary mt-1">~{imageSizeKB} KB • {cropAspect}</div>}
+                <div className="d-flex gap-2 mt-2">
+                  <button className="btn btn-sm btn-outline-secondary" type="button" onClick={()=>{ setCropMode(true); }}>Editar recorte</button>
+                  <button className="btn btn-sm btn-outline-danger" type="button" onClick={()=>{ if(rawImageUrl){ try { URL.revokeObjectURL(rawImageUrl); } catch {} } setImageDataUrl(null); setRawImageUrl(null); setImageSizeKB(null); }}>Quitar imagen</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {kind === 'url' && (
+          <div className="mt-2">
+            <label className="form-label">URL (YouTube/Twitch u otra)</label>
+            <input className="form-control" value={urlPayload} onChange={e=>{ setUrlError(null); setUrlPayload(e.target.value); }} placeholder="https://..." />
+            <div className="form-text text-secondary">El contenido se cargará en un iframe en el display (no forzar 1:1).</div>
+            <div className="form-check mt-2">
+              <input className="form-check-input" type="checkbox" id="ann-interactive" checked={interactive} onChange={e=>setInteractive(e.target.checked)} />
+              <label className="form-check-label" htmlFor="ann-interactive">Permitir interacción (desactiva sandbox)</label>
+            </div>
+            {urlError && <div className="text-danger small mt-1">{urlError}</div>}
+            <div className="mt-2 d-flex gap-2">
+              <button className="btn btn-sm btn-outline-secondary" onClick={()=>{
+                // validate url
+                try{ if(!urlPayload.trim()) throw new Error('Vacío'); new URL(urlPayload); setUrlError(null); setShowUrlPreview(v=>!v); }catch{ setUrlError('URL inválida'); setShowUrlPreview(false); }
+              }}>{showUrlPreview ? 'Cerrar vista previa' : 'Vista previa'}</button>
+              {showUrlPreview && !urlError && (
+                <a className="btn btn-sm btn-outline-light" href={urlPayload} target="_blank" rel="noreferrer">Abrir en nueva pestaña</a>
+              )}
+            </div>
+            {showUrlPreview && !urlError && (
+              <div className="mt-2" style={{width:'100%', height:180, borderRadius:8, overflow:'hidden'}}>
+                <iframe src={urlPayload} title="preview" style={{width:'100%', height:'100%', border:0}} {...(interactive ? {} : { sandbox: 'allow-forms allow-scripts allow-same-origin allow-popups' })} />
+              </div>
+            )}
+          </div>
+        )}
+        <div className="row g-2 mt-2">
           <div className="col-6">
             <label className="form-label">Tipo</label>
             <select className="form-select" value={draft.kind} onChange={e=>setDraft(d=>({...d, kind:e.target.value as any}))}>
@@ -1259,10 +1600,33 @@ const AnnouncementConfigurator: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="mt-3 small text-secondary">Enter (Ctrl/Cmd) para enviar • ESC para cerrar</div>
-        <div className="mt-3 d-flex gap-2 justify-content-end">
-          <button className="btn btn-outline-light" onClick={close}>Cancelar</button>
-          <button className="btn btn-primary" style={{background:draft.color,borderColor:draft.color}} onClick={send} disabled={!draft.text.trim()}>Enviar</button>
+          <div className="mt-3 small text-secondary">Enter (Ctrl/Cmd) para enviar • ESC para cerrar</div>
+          <div className="mt-2">
+            <label className="form-label">Seleccionar destinos</label>
+            <select multiple className="form-select" size={6} onChange={(e)=>{
+              const opts = Array.from(e.target.selectedOptions).map(o=>o.value); setTargets(opts);
+            }}>
+              {tournaments.map(t=> <option key={t.id} value={t.id}>{t.name} — {t.game}</option>)}
+            </select>
+            <div className="form-text text-secondary">Dejar vacío = enviar a todos los displays. Mantén Ctrl/Cmd para multi-selección.</div>
+          </div>
+        </div>
+        <div className="border-top px-3 py-2" style={{position:'sticky', bottom:0, background:'#12141a'}}>
+          <div className="d-flex gap-2 justify-content-end">
+            <button className="btn btn-outline-light" onClick={close}>Cancelar</button>
+            <button
+              className="btn btn-primary"
+              style={{background:draft.color,borderColor:draft.color}}
+              onClick={send}
+              disabled={
+                (kind === 'text' && !draft.text.trim()) ||
+                (kind === 'image' && (!imageDataUrl || !!imageError)) ||
+                (kind === 'url' && (!urlPayload.trim() || !!urlError))
+              }
+            >
+              Enviar
+            </button>
+          </div>
         </div>
       </div>
     </div>
