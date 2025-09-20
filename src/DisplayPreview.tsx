@@ -324,7 +324,7 @@ export const DisplayPreview: React.FC<{
     const inRound = t.timer.mode === 'round' && (t.timer.running || t.timer.remainingMs > 0);
     const roundIdx = inRound ? t.roundsCompleted + 1 : t.roundsCompleted;
     const phase =
-      t.timer.mode === 'break' ? 'Descanso'
+      t.timer.mode === 'break' ? 'Break'
       : `Ronda ${Math.max(1, Math.min(roundIdx || 1, t.roundsTotal))}/${t.roundsTotal}`;
     return { state, color, remaining: rem, remainingFmt: formatSplit(rem), phase };
   };
@@ -381,7 +381,7 @@ export const DisplayPreview: React.FC<{
           const fitLabel = fit === 'contain' ? 'Contener' : fit === 'width' ? 'Ancho' : 'Alto';
 
           return (
-            <div key={t.id} className="card bg-body border-0 shadow-sm" style={{ overflow: 'hidden', minWidth: 0 }}>
+            <div key={t.id} className="card bg-body border-0 shadow-sm" style={{ overflow: 'hidden' }}>
               {/* ===== Header con grupos ===== */}
               <div className="card-header bg-body border-0 py-2">
                 <div className="d-flex align-items-center gap-2 flex-wrap">
