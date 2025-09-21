@@ -54,11 +54,6 @@ const IconCoffee = (p: React.SVGProps<SVGSVGElement>) => (
     />
   </svg>
 );
-const IconPlay = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
-    <path d="m8 5 12 7-12 7V5Z" fill="currentColor" />
-  </svg>
-);
 const IconTrophy = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden {...p}>
     <path
@@ -137,9 +132,11 @@ function computeSchedule(t: DisplayTournament, tf: TimeFmt) {
   return items.slice(0, 3);
 }
 
+type TimelineEntry = { label: string; time: string; kind: 'roundEnd'|'breakStart'|'breakEnd'|'eventEnd' };
+
 /** Timeline detallada de próximos eventos (incluye fin de la ronda actual, breaks, fin de cada ronda y fin del evento) */
 function computeTimeline(t: DisplayTournament, tf: TimeFmt) {
-  const items: { label: string; time: string; kind: 'roundEnd'|'breakStart'|'breakEnd'|'eventEnd' }[] = [];
+  const items: TimelineEntry[] = [];
   let base = Date.now();
 
   const inSomething = t.timer.target !== null && (t.timer.running || t.timer.remainingMs > 0);
@@ -199,14 +196,10 @@ const Pill = ({ children, isLight }: PillProps) => (
 interface StatCardProps { label: string; children: React.ReactNode; isLight: boolean }
 const StatCard = ({ label, children, isLight }: StatCardProps) => (
   <div
-    className={pick(
-      isLight,
-      "rounded-xl border border-zinc-200 bg-white/80 shadow-sm p-4 transition-colors hover:bg-white",
-      "rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-colors hover:bg-zinc-900/70"
-    )}
+    className={`stat-card ${isLight ? "stat-card--light" : "stat-card--dark"}`}
   >
-    <div className={pick(isLight, "text-zinc-600 text-[13px]", "text-zinc-400 text-[13px]")}>{label}</div>
-    <div className={pick(isLight, "mt-1.5 font-semibold text-zinc-900", "mt-1.5 font-semibold text-zinc-100")}>{children}</div>
+    <div className={pick(isLight, "stat-card-label text-zinc-500", "stat-card-label text-zinc-400")}>{label}</div>
+    <div className={pick(isLight, "stat-card-value text-zinc-900", "stat-card-value text-white")}>{children}</div>
   </div>
 );
 
@@ -215,43 +208,54 @@ const TimeBlock = ({
   label,
   accent,
   isLight,
+  showDivider,
 }: {
   value: string;
   label: string;
   accent: "indigo" | "amber";
   isLight: boolean;
-}) => (
-  <div className="group relative overflow-hidden rounded-2xl hud-corners time-ambient">
-    <div className={`neon-border ${accent === "amber" ? "neon-amber" : "neon-indigo"}`} />
+  showDivider?: boolean;
+}) => {
+  const palette =
+    accent === "amber"
+      ? isLight
+        ? ["#f59e0b", "#fbbf24"]
+        : ["#facc15", "#fb923c"]
+      : isLight
+      ? ["#2563eb", "#7c3aed"]
+      : ["#22d3ee", "#8b5cf6"];
+
+  return (
     <div
-      className={pick(
-        isLight,
-        "relative z-10 rounded-2xl bg-zinc-50 px-5 py-4 md:px-6 md:py-5",
-        "relative z-10 rounded-2xl bg-zinc-900/60 px-5 py-4 md:px-6 md:py-5"
-      )}
+      className={[
+        "timer-segment",
+        isLight ? "timer-segment--light" : "timer-segment--dark",
+        showDivider ? "timer-segment--with-divider" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{
+        ["--segment-accent" as any]: palette[0],
+        ["--segment-accent-soft" as any]: palette[1],
+      }}
     >
-      <div
-        className={pick(
-          isLight,
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-900",
-          "tabular-nums font-black leading-none tracking-tight text-5xl md:text-7xl animate-flipTick will-change-transform digit-glow text-zinc-100"
-        )}
-        style={{ fontFeatureSettings: "'tnum' on", fontVariantNumeric: "tabular-nums" }}
-      >
+      <span className={`timer-segment-value ${isLight ? "timer-segment-value--light" : "timer-segment-value--dark"}`}>
         {value}
-      </div>
-      <div
-        className={pick(
-          isLight,
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500",
-          "mt-1 text-xs uppercase tracking-[0.2em] text-zinc-400"
-        )}
-      >
+      </span>
+      <span className={`timer-segment-label ${isLight ? "timer-segment-label--light" : "timer-segment-label--dark"}`}>
         {label}
-      </div>
+      </span>
+      {showDivider && (
+        <span
+          className={`timer-segment-divider ${isLight ? "timer-segment-divider--light" : "timer-segment-divider--dark"}`}
+          aria-hidden
+        >
+          :
+        </span>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const PageDots: React.FC<{ count: number; index: number; isLight: boolean }> = ({
   count,
@@ -376,7 +380,7 @@ const SuperHeader: React.FC<{
       <div className="relative z-10 flex items-center gap-4 flex-wrap p-4 md:p-5">
         <div className="flex items-center gap-2 md:gap-3">
           <span className="brand-mark brand-mark--blend" aria-label="SIGAD">
-            <BrandLogo size={44} />
+            <BrandLogo size={58} />
           </span>
           <div className={isLight ? "text-xl md:text-2xl font-extrabold tracking-tight text-zinc-900" : "text-xl md:text-2xl font-extrabold tracking-tight"}>
             <span
@@ -605,19 +609,29 @@ const AnnounceHost: React.FC<{ tournaments?: DisplayTournament[]; isLight?: bool
             style={{ width: drawerW, transform: open ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .35s ease' }}
             aria-live="polite"
           >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700/30">
-              <span className={pick(isLight ?? false, "text-zinc-700 font-semibold", "font-semibold")}>Anuncio</span>
-              <span className={pick(isLight ?? false, "text-[12px] text-zinc-500", "text-[12px] text-zinc-400")}>
-                {active.persistent ? "Persistente" : "Temporal"}
-              </span>
+            <header
+              className={`announce-drawer-head ${
+                isLight ? "announce-drawer-head--light" : "announce-drawer-head--dark"
+              }`}
+            >
+              <BrandLogo size={40} className="announce-drawer-logo" />
+              <div className="announce-drawer-meta">
+                <span className="announce-drawer-title">Anuncio</span>
+                <span className="announce-drawer-tag">
+                  {active.persistent ? "Persistente" : "Temporal"}
+                </span>
+              </div>
               <button
-                className={pick(isLight ?? false, "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-100", "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-700 hover:bg-zinc-800/70")}
+                type="button"
+                className={`announce-drawer-toggle ${
+                  isLight ? "announce-drawer-toggle--light" : "announce-drawer-toggle--dark"
+                }`}
                 onClick={()=>setOpen(o=>!o)}
                 aria-expanded={open}
               >
                 {open ? 'Ocultar' : 'Mostrar'}
               </button>
-            </div>
+            </header>
             {open && (
               <div className="p-4">
                 {active.kind === 'text' && (
@@ -643,6 +657,20 @@ const AnnounceHost: React.FC<{ tournaments?: DisplayTournament[]; isLight?: bool
             )}
           </aside>
         )}
+
+      {active && !open && (
+        <button
+          type="button"
+          className={`announce-drawer-handle ${
+            isLight ? "announce-drawer-handle--light" : "announce-drawer-handle--dark"
+          }`}
+          onClick={()=>setOpen(true)}
+          aria-label="Mostrar anuncio"
+        >
+          <BrandLogo size={34} className="announce-drawer-handle-logo" />
+          <span className="announce-drawer-handle-text">Ver anuncio</span>
+        </button>
+      )}
 
       {items.length > 0 && (
         <div className="sigad-noti-stack tr" style={{ zIndex: 3000 }} aria-live="polite">
@@ -717,6 +745,7 @@ const Display: React.FC = () => {
   }, [active, now]);
   const { h, m, s } = formatSplit(remaining);
   const timeline = active ? computeTimeline(active, timeFmt) : [];
+  const schedule = active ? computeSchedule(active, timeFmt) : [];
 
   const progressPct = useMemo(() => {
     if (!active) return 0;
@@ -760,6 +789,27 @@ const Display: React.FC = () => {
 
   const accent: "indigo" | "amber" = active?.timer.mode === "break" ? "amber" : "indigo";
   const isLight = active?.theme === "light";
+  const accentPalette = accent === "amber"
+    ? {
+        primary: isLight ? "#f59e0b" : "#facc15",
+        secondary: isLight ? "#fbbf24" : "#fb923c",
+      }
+    : {
+        primary: isLight ? "#2563eb" : "#22d3ee",
+        secondary: isLight ? "#7c3aed" : "#8b5cf6",
+      };
+  const roundIndex = active ? (active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted) : 0;
+  const hasRounds = !!active && active.roundsTotal > 0;
+  const displayRoundIndex = hasRounds ? Math.min(Math.max(roundIndex, 1), active?.roundsTotal ?? 1) : roundIndex;
+  const roundSummary = !active
+    ? "-"
+    : active.timer.mode === "break"
+    ? active.breakEnabled && active.breakMinutes > 0
+      ? `Break • ${active.breakMinutes} min`
+      : "Break en curso"
+    : hasRounds
+    ? `Ronda ${displayRoundIndex} / ${active.roundsTotal}`
+    : "Rondas sin configurar";
 
   // ===== Zoom de display controlado por App (por torneo) =====
   const ZOOM_LS = 'sigad_display_zoom_v2';
@@ -855,9 +905,23 @@ const Display: React.FC = () => {
       </div>
 
       <div className="relative z-20">
-  <div className="relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${100/scale}%` }}>
-  <div className="max-w-7xl mx-auto px-6 py-8" style={{ marginRight: drawerPad ? `${Math.round(drawerPad / scale)}px` : undefined, transition: 'margin-right .3s ease' }}>
-        {/* Notificaciones HUD (solo toasts legacy) */}
+        <div
+          className="relative"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            width: `${100 / scale}%`,
+          }}
+        >
+          <div
+            className="mx-auto px-6 py-8"
+            style={{
+              maxWidth: "min(1500px, 100%)",
+              marginRight: drawerPad ? `${Math.round(drawerPad / scale)}px` : undefined,
+              transition: "margin-right .3s ease",
+            }}
+          >
+            {/* Notificaciones HUD (solo toasts legacy) */}
 
         {/* === HEADER SUPER VISUAL === */}
         <SuperHeader
@@ -884,194 +948,276 @@ const Display: React.FC = () => {
 
         {/* HUD principal */}
         {active && (
-          <section
-            className={pick(
-              isLight ?? false,
-              "relative overflow-hidden rounded-3xl border border-zinc-200 bg-white/70 shadow-sm backdrop-blur p-6 md:p-8 hud-frame sweep",
-              "relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 hud-frame sweep"
-            )}
-          >
-            {/* Encabezado */}
-            <div className="flex flex-wrap items-center gap-3 mb-6">
-              <Pill isLight={!!isLight}>
-                <IconTrophy className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-300")} /> {active.game}
-              </Pill>
-
-              <span className={pick(!!isLight, "text-zinc-600 text-sm inline-flex items-center gap-2", "text-zinc-300 text-sm inline-flex items-center gap-2")}>
-                <IconLayers className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                {active.timer.mode === "break" ? <>Break</> : <>Ronda • {active.timer.mode === "round" ? active.roundsCompleted + 1 : active.roundsCompleted} / {active.roundsTotal}</>}
-              </span>
-
-              <span className={pick(!!isLight, "ml-auto text-zinc-600 text-sm inline-flex items-center gap-2", "ml-auto text-zinc-300 text-sm inline-flex items-center gap-2")}>
-                <IconTarget className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                Objetivo: {active.timer.target ? dayjs(active.timer.target).format(fmtClock(timeFmt)) : "-"}
-              </span>
-            </div>
-
-            {/* Título */}
-            <h1
-              className={pick(
-                !!isLight,
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance text-zinc-900",
-                "mb-5 text-2xl md:text-4xl font-extrabold tracking-tight text-balance"
-              )}
-            >
-              <span
-                className={pick(
-                  !!isLight,
-                  "title-shine bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-600 bg-clip-text text-transparent",
-                  "title-shine bg-gradient-to-r from-white via-zinc-200 to-white/70 bg-clip-text text-transparent"
-                )}
-              >
-                {active.name}
-              </span>
-            </h1>
-
-            {/* HH : MM : SS */}
-            <div className="grid grid-cols-3 gap-4 mb-7" aria-live="polite">
-              <TimeBlock value={h} label="HORAS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={m} label="MINUTOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-              <TimeBlock value={s} label="SEGUNDOS" accent={active?.timer.mode === "break" ? "amber" : "indigo"} isLight={!!isLight} />
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-sm">
-              <StatCard label="Estado" isLight={!!isLight}>
-                <span
-                  className={(() => {
-                    const base = "inline-flex items-center gap-2";
-                    if (stateLabel === "En curso") return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
-                    if (stateLabel === "Pausado") return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
-                    if (stateLabel === "Terminado") return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
-                    return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
-                  })()}
-                >
-                  <span className="relative inline-flex">
-                    <span
-                      className={(() => {
-                        if (stateLabel === "En curso") return "status-dot bg-emerald-500";
-                        if (stateLabel === "Pausado") return "status-dot bg-amber-500";
-                        if (stateLabel === "Terminado") return "status-dot bg-rose-500";
-                        return "status-dot bg-zinc-400";
-                      })()}
-                    />
-                    {(stateLabel === "En curso" || stateLabel === "Pausado") && (
-                      <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
-                    )}
-                  </span>
-                  {stateLabel}
-                </span>
-              </StatCard>
-
-              <StatCard label="ETA fin torneo" isLight={!!isLight}>
-                {(() => {
-                  const perRound = active.roundMinutes * 60_000;
-                  const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
-                  const inRound =
-                    active.timer.target !== null &&
-                    (active.timer.running || active.timer.remainingMs > 0) &&
-                    active.timer.mode === "round";
-                  const left =
-                    active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
-                  const eta =
-                    remaining +
-                    Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
-                  return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
-                })()}
-              </StatCard>
-
-              <StatCard label="Break" isLight={!!isLight}>
-                <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-700", "inline-flex items-center gap-2 text-zinc-200")}>
-                  <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                  {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
-                </span>
-              </StatCard>
-            </div>
-
-            {/* Progreso */}
-            <div className="mb-2">
+          <section className={`hud-shell ${isLight ? "hud-shell--light" : "hud-shell--dark"} sweep`}>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
               <div
-                className={pick(
-                  !!isLight,
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 relative",
-                  "neon-progress h-2 w-full overflow-hidden rounded-full bg-zinc-800/80 relative"
-                )}
-                style={
-                  {
-                    ["--p" as any]: displayPct,
-                    ["--c1" as any]: accent === "amber" ? "#FFB457" : isLight ? "#0ea5e9" : "#00eaff",
-                    ["--c2" as any]: accent === "amber" ? "#FF3D81" : isLight ? "#6366f1" : "#8b5cf6",
-                    color: "var(--c2)",
-                  } as React.CSSProperties
-                }
+                className={`hud-hero ${isLight ? "hud-hero--light" : "hud-hero--dark"}`}
+                style={{
+                  ["--hero-accent" as any]: accentPalette.primary,
+                  ["--hero-accent-soft" as any]: accentPalette.secondary,
+                }}
               >
-                <div className={`h-full progress-stripes progress-fill ${transitionClass}`} style={{ width: `${displayPct}%` }} />
-                <span className="progress-comet" aria-hidden />
-                <span className="progress-tip" aria-hidden />
-                <span className="progress-edge" aria-hidden />
-              </div>
-              <div className={pick(!!isLight, "mt-2 text-[12px] text-zinc-600 flex items-center gap-2", "mt-2 text-[12px] text-zinc-400 flex items-center gap-2")}>
-                <IconPlay className={pick(!!isLight, "size-3.5 text-zinc-500", "size-3.5 text-zinc-400")} />
-                {active.timer.mode === "break" ? "Progreso del break" : "Progreso de la ronda"}
-              </div>
-            </div>
-
-            {/* Mapa de rondas + Próximos eventos */}
-            {active && (
-              <div className="mt-5 grid grid-cols-1 lg:grid-cols-5 gap-4">
-                {/* Mapa */}
-                <div
-                  className={pick(
-                    !!isLight,
-                    "lg:col-span-3 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
-                    "lg:col-span-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
-                  )}
-                >
-                  <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>Mapa de rondas</div>
-                  <RoundMap t={active} isLight={!!isLight} />
+                <span className="hud-hero-brandmark" aria-hidden />
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <Pill isLight={!!isLight}>
+                    <IconTrophy className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-300")} /> {active.game}
+                  </Pill>
+                  <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-600", "inline-flex items-center gap-2 text-zinc-300")}>
+                    <IconLayers className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                    {roundSummary}
+                  </span>
+                  <span className={pick(!!isLight, "ml-auto inline-flex items-center gap-2 text-zinc-600", "ml-auto inline-flex items-center gap-2 text-zinc-300")}>
+                    <IconTarget className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                    Objetivo: {active.timer.target ? dayjs(active.timer.target).format(fmtClock(timeFmt)) : "-"}
+                  </span>
                 </div>
 
-                {/* Timeline */}
-                {timeline.length > 0 && (
-                  <div
-                    className={pick(
-                      !!isLight,
-                      "lg:col-span-2 rounded-2xl border border-zinc-200 bg-white/75 p-4 shadow-sm",
-                      "lg:col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4"
-                    )}
-                  >
-                    <div className={pick(!!isLight, "text-zinc-600 text-sm mb-2", "text-zinc-400 text-sm mb-2")}>Próximos eventos</div>
-                    <div className="flex flex-col gap-2">
-                      {timeline.map((it, i) => (
+                <h1 className={pick(!!isLight, "hero-title text-zinc-900", "hero-title text-white")}>
+                  <span className="hero-title-gradient">{active.name}</span>
+                </h1>
+
+                <div className="timer-hero" aria-live="polite">
+                  {[
+                    { value: h, label: "HORAS" },
+                    { value: m, label: "MINUTOS" },
+                    { value: s, label: "SEGUNDOS" },
+                  ].map((seg, idx) => (
+                    <TimeBlock
+                      key={seg.label}
+                      value={seg.value}
+                      label={seg.label}
+                      accent={accent}
+                      isLight={!!isLight}
+                      showDivider={idx < 2}
+                    />
+                  ))}
+                </div>
+
+                <div className="hero-progress">
+                  <div className={pick(!!isLight, "flex items-center justify-between text-[11px] uppercase tracking-[0.3em] text-zinc-500", "flex items-center justify-between text-[11px] uppercase tracking-[0.3em] text-zinc-400")}>
+                    <span>Tiempo en curso</span>
+                    <span>{Math.round(displayPct)}%</span>
+                  </div>
+                  <div className="hero-progress-track">
+                    <div
+                      className={`hero-progress-fill ${transitionClass}`}
+                      style={{
+                        width: `${displayPct}%`,
+                        ["--hero-accent" as any]: accentPalette.primary,
+                        ["--hero-accent-soft" as any]: accentPalette.secondary,
+                      }}
+                    />
+                    <span className="hero-progress-glow" aria-hidden />
+                  </div>
+                  <div className={pick(!!isLight, "mt-2 text-sm text-zinc-600", "mt-2 text-sm text-zinc-300")}>
+                    {active.timer.mode === "break"
+                      ? "Break en progreso"
+                      : roundIndex > 0
+                      ? `Ronda ${displayRoundIndex} en progreso`
+                      : hasRounds
+                      ? "Ronda en preparación"
+                      : "Sin rondas configuradas"}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <StatCard label="Estado" isLight={!!isLight}>
+                    <span
+                      className={(() => {
+                        const base = "inline-flex items-center gap-2";
+                        if (stateLabel === "En curso") return pick(!!isLight, `${base} text-emerald-600`, `${base} text-emerald-400`);
+                        if (stateLabel === "Pausado") return pick(!!isLight, `${base} text-amber-600`, `${base} text-amber-400`);
+                        if (stateLabel === "Terminado") return pick(!!isLight, `${base} text-rose-600`, `${base} text-rose-400`);
+                        return pick(!!isLight, `${base} text-zinc-800`, `${base} text-zinc-100`);
+                      })()}
+                    >
+                      <span className="relative inline-flex">
+                        <span
+                          className={(() => {
+                            if (stateLabel === "En curso") return "status-dot bg-emerald-500";
+                            if (stateLabel === "Pausado") return "status-dot bg-amber-500";
+                            if (stateLabel === "Terminado") return "status-dot bg-rose-500";
+                            return "status-dot bg-zinc-400";
+                          })()}
+                        />
+                        {(stateLabel === "En curso" || stateLabel === "Pausado") && (
+                          <span className={stateLabel === "En curso" ? "status-ping bg-emerald-500" : "status-ping bg-amber-500"} />
+                        )}
+                      </span>
+                      {stateLabel}
+                    </span>
+                  </StatCard>
+
+                  <StatCard label="ETA fin torneo" isLight={!!isLight}>
+                    {(() => {
+                      const perRound = active.roundMinutes * 60_000;
+                      const perBreak = (active.breakEnabled ? active.breakMinutes : 0) * 60_000;
+                      const inRound =
+                        active.timer.target !== null &&
+                        (active.timer.running || active.timer.remainingMs > 0) &&
+                        active.timer.mode === "round";
+                      const left =
+                        active.roundsTotal - (inRound ? active.roundsCompleted + 1 : active.roundsCompleted);
+                      const eta =
+                        remaining +
+                        Math.max(0, left) * (perRound + (active.breakEnabled && active.breakMinutes > 0 ? perBreak : 0));
+                      return eta > 0 ? dayjs(Date.now() + eta).format(fmtClock(timeFmt)) : "-";
+                    })()}
+                  </StatCard>
+
+                  <StatCard label="Duración ronda" isLight={!!isLight}>
+                    {active.roundMinutes} min
+                  </StatCard>
+
+                  <StatCard label="Break" isLight={!!isLight}>
+                    <span className={pick(!!isLight, "inline-flex items-center gap-2 text-zinc-700", "inline-flex items-center gap-2 text-zinc-200")}>
+                      <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
+                      {active.breakEnabled ? `${active.breakMinutes} min` : "No habilitado"}
+                    </span>
+                  </StatCard>
+                </div>
+
+                {schedule.length > 0 && (
+                  <div className="hero-schedule">
+                    <div className={pick(!!isLight, "text-[11px] uppercase tracking-[0.3em] text-zinc-500", "text-[11px] uppercase tracking-[0.3em] text-zinc-400")}>
+                      Itinerario clave
+                    </div>
+                    <div className="hero-schedule-grid">
+                      {schedule.map((it) => (
                         <div
-                          key={i}
-                          className={pick(
-                            !!isLight,
-                            "flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm",
-                            "flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm"
-                          )}
+                          key={`${it.label}-${it.time}`}
+                          className={`hero-schedule-item ${isLight ? "hero-schedule-item--light" : "hero-schedule-item--dark"}`}
                         >
-                          {it.kind === 'breakStart' || it.kind === 'breakEnd' ? (
-                            <IconCoffee className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                          ) : (
-                            <IconClock className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-400")} />
-                          )}
-                          <span className={pick(!!isLight, "text-zinc-600", "text-zinc-300")}>{it.label}:</span>
-                          <strong className={pick(!!isLight, "tracking-tight text-zinc-900 ml-auto", "tracking-tight text-zinc-100 ml-auto")}>
+                          <span className={pick(!!isLight, "text-sm font-medium text-zinc-600", "text-sm font-medium text-zinc-200")}>
+                            {it.label}
+                          </span>
+                          <span className={pick(!!isLight, "text-lg font-semibold tracking-tight text-zinc-900", "text-lg font-semibold tracking-tight text-white")}>
                             {it.time}
-                          </strong>
+                          </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-            )}
+
+              <div className="flex flex-col gap-6">
+                {timeline.length > 0 && (
+                  <div className={`hud-card ${isLight ? "hud-card--light" : "hud-card--dark"}`}>
+                    <div className={pick(!!isLight, "text-[11px] uppercase tracking-[0.3em] text-zinc-500", "text-[11px] uppercase tracking-[0.3em] text-zinc-400")}>
+                      Próximos eventos
+                    </div>
+                    <div className="timeline-list">
+                      {timeline.map((it, i) => {
+                        const tone =
+                          it.kind === "eventEnd"
+                            ? isLight
+                              ? "#ec4899"
+                              : "#f472b6"
+                            : it.kind === "breakStart" || it.kind === "breakEnd"
+                            ? accentPalette.secondary
+                            : accentPalette.primary;
+                        const hint =
+                          it.kind === "eventEnd"
+                            ? "Meta final del torneo"
+                            : it.kind === "breakStart"
+                            ? "Pausa programada"
+                            : it.kind === "breakEnd"
+                            ? "Reinicio del juego"
+                            : "Cierre de ronda";
+
+                        return (
+                          <div
+                            key={`${it.label}-${i}`}
+                            className={`timeline-item ${isLight ? "timeline-item--light" : "timeline-item--dark"}`}
+                          >
+                            <span className="timeline-bullet" style={{ background: tone }} />
+                            {i < timeline.length - 1 && (
+                              <span
+                                className="timeline-connector"
+                                style={{ background: isLight ? "rgba(24,24,27,0.08)" : "rgba(248,250,252,0.12)" }}
+                              />
+                            )}
+                            <div className="timeline-content">
+                              <div className="timeline-row">
+                                <span className={pick(!!isLight, "timeline-label text-zinc-700", "timeline-label text-zinc-200")}>
+                                  {it.label}
+                                </span>
+                                <span className={pick(!!isLight, "timeline-time text-zinc-900", "timeline-time text-white")}>
+                                  {it.time}
+                                </span>
+                              </div>
+                              <div className={pick(!!isLight, "timeline-hint text-zinc-500", "timeline-hint text-zinc-400")}>
+                                {hint}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className={`hud-card ${isLight ? "hud-card--light" : "hud-card--dark"}`}>
+                  <div className={pick(!!isLight, "text-[11px] uppercase tracking-[0.3em] text-zinc-500", "text-[11px] uppercase tracking-[0.3em] text-zinc-400")}>
+                    Mapa de rondas
+                  </div>
+                  <div className={pick(!!isLight, "mt-3 text-sm text-zinc-600", "mt-3 text-sm text-zinc-300")}>
+                    {active.roundsTotal > 0
+                      ? `${active.roundsCompleted} de ${active.roundsTotal} rondas completadas`
+                      : "Sin rondas registradas"}
+                  </div>
+                  <div className="mt-4">
+                    <RoundMap t={active} isLight={!!isLight} />
+                  </div>
+                </div>
+
+                <div className={`hud-card ${isLight ? "hud-card--light" : "hud-card--dark"}`}>
+                  <div className={pick(!!isLight, "text-[11px] uppercase tracking-[0.3em] text-zinc-500", "text-[11px] uppercase tracking-[0.3em] text-zinc-400")}>
+                    Configuración del reloj
+                  </div>
+                  <dl className="hud-card-specs">
+                    <div>
+                      <dt className={pick(!!isLight, "hud-card-spec-label text-zinc-500", "hud-card-spec-label text-zinc-400")}>
+                        Duración ronda
+                      </dt>
+                      <dd className={pick(!!isLight, "hud-card-spec-value text-zinc-900", "hud-card-spec-value text-white")}>
+                        {active.roundMinutes} min
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className={pick(!!isLight, "hud-card-spec-label text-zinc-500", "hud-card-spec-label text-zinc-400")}>
+                        Break
+                      </dt>
+                      <dd className={pick(!!isLight, "hud-card-spec-value text-zinc-900", "hud-card-spec-value text-white")}>
+                        {active.breakEnabled ? `${active.breakMinutes} min` : "Sin break"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className={pick(!!isLight, "hud-card-spec-label text-zinc-500", "hud-card-spec-label text-zinc-400")}>
+                        Auto siguiente
+                      </dt>
+                      <dd className={pick(!!isLight, "hud-card-spec-value text-zinc-900", "hud-card-spec-value text-white")}>
+                        {active.autoStartNext ? "Activado" : "Manual"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className={pick(!!isLight, "hud-card-spec-label text-zinc-500", "hud-card-spec-label text-zinc-400")}>
+                        Creado
+                      </dt>
+                      <dd className={pick(!!isLight, "hud-card-spec-value text-zinc-900", "hud-card-spec-value text-white")}>
+                        {dayjs(active.createdAt).format(timeFmt === "12" ? "DD/MM hh:mm A" : "DD/MM HH:mm")}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
-  {/* Panel de anuncios: colocar DEBAJO del HUD principal */}
-  <AnnounceHost tournaments={tournaments} isLight={!!isLight} onMetrics={(w, open)=> setDrawerPad(open ? w + 24 : 0)} />
+        {/* Panel de anuncios: colocar DEBAJO del HUD principal */}
+        <AnnounceHost tournaments={tournaments} isLight={!!isLight} onMetrics={(w, open)=> setDrawerPad(open ? w + 24 : 0)} />
 
         {/* Lista compacta (3 por página) */}
         {!fixedId.current && tournaments.length > 1 && (
