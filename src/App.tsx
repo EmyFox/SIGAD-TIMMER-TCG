@@ -5,7 +5,7 @@ import { emitAll, openDisplayWindow, emitAnnouncement, emitAdvancedAnnouncement 
 import { PanelToastHost, panelNotify } from './notificationsPanel';
 import { useAuth } from './auth';
 import { BrandLogo } from './BrandLogo';
-import { DisplayPreview } from './DisplayPreview';
+import InlineDisplayPreview from './InlineDisplayPreview';
 import { ErrorBoundary } from './ErrorBoundary';
 
 /* =============================================================
@@ -842,13 +842,7 @@ export const MasterPanel: React.FC = () => {
     return ()=> window.removeEventListener('keydown', handler);
   }, [anyRunning, pauseAll, resumeAll]);
 
-  // Torneos "derivados" para DisplayPreview (si internamente usa remainingMs)
-  const tournamentsForPreview = useMemo(() => {
-    return tournaments.map(t => {
-      const rm = getRemainingMs(t, nowMs);
-      return (t.timer.remainingMs === rm) ? t : ({ ...t, timer: { ...t.timer, remainingMs: rm } });
-    });
-  }, [tournaments, nowMs]);
+  // Previews integrados por ficha (se eliminó el sidebar)
 
   return (
     <>
@@ -897,50 +891,40 @@ export const MasterPanel: React.FC = () => {
         pushToast={pushToast as any}
       />
 
-      {/* Grid + sidebar preview layout */}
+      {/* Grid con previews integrados por tarjeta */}
       <main className="container pb-3" style={{maxHeight: 'calc(100vh - 170px)', overflowY: 'auto'}}>
-        <div className="row g-3">
-          <div className="col-12 col-xl-8">
-            <div className={gridClasses}>
-              {tournaments.map(t => (
-                <div className="col" key={t.id}>
-                  <TournamentCard
-                    t={t}
-                    nowMs={nowMs}
-                    timeFmt={settings.timeFmt}
-                    compact={compact}
-                    onEdit={()=>openEdit(t)}
-                    onChange={(patch) => setTournaments(prev => prev.map(x => x.id === t.id ? ({ ...x, ...patch }) : x))}
-                    startRound={(mins?: number, label?: string) => startRound(t.id, mins, label)}
-                    startBreak={()=>startBreakNow(t.id)}
-                    skipBreak={()=>skipBreak(t.id)}
-                    pause={() => pause(t.id)}
-                    resume={() => resume(t.id)}
-                    reset={() => resetTimer(t.id)}
-                    add1={() => addMinutes(t.id, 1)}
-                    add5={() => addMinutes(t.id, 5)}
-                    sub1={() => addMinutes(t.id, -1)}
-                    sub5={() => addMinutes(t.id, -5)}
-                    restartRound={()=>restartCurrentRound(t.id)}
-                    prevRound={()=>prevRound(t.id)}
-                    completeRound={() => completeRound(t.id)}
-                    nextRound={() => nextRound(t.id)}
-                    remove={() => removeTournament(t.id)}
-                    duplicate={() => duplicateTournament(t.id)}
-                    openDisplay={() => { markOpenDisplay(t.id); openDisplayWindow(t.id); }}
-                    isDisplayOpen={isDisplayOpen(t.id)}
-                  />
-                </div>
-              ))}
+        <div className={gridClasses}>
+          {tournaments.map(t => (
+            <div className="col" key={t.id}>
+              <TournamentCard
+                t={t}
+                nowMs={nowMs}
+                timeFmt={settings.timeFmt}
+                compact={compact}
+                onEdit={()=>openEdit(t)}
+                onChange={(patch) => setTournaments(prev => prev.map(x => x.id === t.id ? ({ ...x, ...patch }) : x))}
+                startRound={(mins?: number, label?: string) => startRound(t.id, mins, label)}
+                startBreak={()=>startBreakNow(t.id)}
+                skipBreak={()=>skipBreak(t.id)}
+                pause={() => pause(t.id)}
+                resume={() => resume(t.id)}
+                reset={() => resetTimer(t.id)}
+                add1={() => addMinutes(t.id, 1)}
+                add5={() => addMinutes(t.id, 5)}
+                sub1={() => addMinutes(t.id, -1)}
+                sub5={() => addMinutes(t.id, -5)}
+                restartRound={()=>restartCurrentRound(t.id)}
+                prevRound={()=>prevRound(t.id)}
+                completeRound={() => completeRound(t.id)}
+                nextRound={() => nextRound(t.id)}
+                remove={() => removeTournament(t.id)}
+                duplicate={() => duplicateTournament(t.id)}
+                openDisplay={() => { markOpenDisplay(t.id); openDisplayWindow(t.id); }}
+                isDisplayOpen={isDisplayOpen(t.id)}
+                onToggleTheme={(id)=> setTournaments(prev => prev.map(x => x.id===id ? ({...x, displayTheme: (x.displayTheme||'dark')==='dark'?'light':'dark'}) : x))}
+              />
             </div>
-          </div>
-          <div className="col-12 col-xl-4 d-flex flex-column gap-3">
-            <DisplayPreview
-              tournaments={tournamentsForPreview}
-              timeFmt={settings.timeFmt}
-              onToggleTheme={(id)=> setTournaments(prev => prev.map(t => t.id===id ? ({...t, displayTheme: (t.displayTheme||'dark')==='dark'?'light':'dark'}) : t))}
-            />
-          </div>
+          ))}
         </div>
       </main>
 
@@ -980,7 +964,8 @@ const TournamentCard: React.FC<{
   duplicate: () => void;
   openDisplay: () => void;
   isDisplayOpen: boolean;
-}> = ({ t, nowMs, timeFmt, compact, onEdit, onChange, startRound, startBreak, skipBreak, pause, resume, reset, add1, add5, sub1, sub5, restartRound, prevRound, completeRound, nextRound, remove, duplicate, openDisplay, isDisplayOpen }) => {
+  onToggleTheme: (id: string) => void;
+}> = ({ t, nowMs, timeFmt, compact, onEdit, onChange, startRound, startBreak, skipBreak, pause, resume, reset, add1, add5, sub1, sub5, restartRound, prevRound, completeRound, nextRound, remove, duplicate, openDisplay, isDisplayOpen, onToggleTheme }) => {
   const { inRound, currentIndex, roundsLeftAfterCurrent } = useMemo(() => computeRoundsInfo(t), [t]);
   const remainingMs = getRemainingMs(t, nowMs);
   const expired = !t.timer.running && t.timer.target !== null && remainingMs <= 0;
@@ -1034,6 +1019,8 @@ const TournamentCard: React.FC<{
       </header>
 
   <div className="card-body d-flex flex-column gap-3 text-center">
+    {/* Preview arriba de la ficha */}
+    <InlineDisplayPreview tournament={t} timeFmt={timeFmt} onToggleTheme={onToggleTheme} />
         <input aria-label="Nombre del torneo" className={nameInputClass} value={t.name} onChange={e=>onChange({ name: e.target.value })} />
 
         {/* ===== Controles prioritarios ===== */}
