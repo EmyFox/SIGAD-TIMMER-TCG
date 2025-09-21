@@ -208,11 +208,13 @@ const TimeBlock = ({
   label,
   accent,
   isLight,
+  showDivider,
 }: {
   value: string;
   label: string;
   accent: "indigo" | "amber";
   isLight: boolean;
+  showDivider?: boolean;
 }) => {
   const palette =
     accent === "amber"
@@ -225,7 +227,13 @@ const TimeBlock = ({
 
   return (
     <div
-      className={`timer-segment ${isLight ? "timer-segment--light" : "timer-segment--dark"}`}
+      className={[
+        "timer-segment",
+        isLight ? "timer-segment--light" : "timer-segment--dark",
+        showDivider ? "timer-segment--with-divider" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={{
         ["--segment-accent" as any]: palette[0],
         ["--segment-accent-soft" as any]: palette[1],
@@ -237,6 +245,14 @@ const TimeBlock = ({
       <span className={`timer-segment-label ${isLight ? "timer-segment-label--light" : "timer-segment-label--dark"}`}>
         {label}
       </span>
+      {showDivider && (
+        <span
+          className={`timer-segment-divider ${isLight ? "timer-segment-divider--light" : "timer-segment-divider--dark"}`}
+          aria-hidden
+        >
+          :
+        </span>
+      )}
     </div>
   );
 };
@@ -364,7 +380,7 @@ const SuperHeader: React.FC<{
       <div className="relative z-10 flex items-center gap-4 flex-wrap p-4 md:p-5">
         <div className="flex items-center gap-2 md:gap-3">
           <span className="brand-mark brand-mark--blend" aria-label="SIGAD">
-            <BrandLogo size={44} />
+            <BrandLogo size={58} />
           </span>
           <div className={isLight ? "text-xl md:text-2xl font-extrabold tracking-tight text-zinc-900" : "text-xl md:text-2xl font-extrabold tracking-tight"}>
             <span
@@ -593,19 +609,29 @@ const AnnounceHost: React.FC<{ tournaments?: DisplayTournament[]; isLight?: bool
             style={{ width: drawerW, transform: open ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .35s ease' }}
             aria-live="polite"
           >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-700/30">
-              <span className={pick(isLight ?? false, "text-zinc-700 font-semibold", "font-semibold")}>Anuncio</span>
-              <span className={pick(isLight ?? false, "text-[12px] text-zinc-500", "text-[12px] text-zinc-400")}>
-                {active.persistent ? "Persistente" : "Temporal"}
-              </span>
+            <header
+              className={`announce-drawer-head ${
+                isLight ? "announce-drawer-head--light" : "announce-drawer-head--dark"
+              }`}
+            >
+              <BrandLogo size={40} className="announce-drawer-logo" />
+              <div className="announce-drawer-meta">
+                <span className="announce-drawer-title">Anuncio</span>
+                <span className="announce-drawer-tag">
+                  {active.persistent ? "Persistente" : "Temporal"}
+                </span>
+              </div>
               <button
-                className={pick(isLight ?? false, "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-300 hover:bg-zinc-100", "ml-auto text-[12px] px-3 py-1 rounded border border-zinc-700 hover:bg-zinc-800/70")}
+                type="button"
+                className={`announce-drawer-toggle ${
+                  isLight ? "announce-drawer-toggle--light" : "announce-drawer-toggle--dark"
+                }`}
                 onClick={()=>setOpen(o=>!o)}
                 aria-expanded={open}
               >
                 {open ? 'Ocultar' : 'Mostrar'}
               </button>
-            </div>
+            </header>
             {open && (
               <div className="p-4">
                 {active.kind === 'text' && (
@@ -631,6 +657,20 @@ const AnnounceHost: React.FC<{ tournaments?: DisplayTournament[]; isLight?: bool
             )}
           </aside>
         )}
+
+      {active && !open && (
+        <button
+          type="button"
+          className={`announce-drawer-handle ${
+            isLight ? "announce-drawer-handle--light" : "announce-drawer-handle--dark"
+          }`}
+          onClick={()=>setOpen(true)}
+          aria-label="Mostrar anuncio"
+        >
+          <BrandLogo size={34} className="announce-drawer-handle-logo" />
+          <span className="announce-drawer-handle-text">Ver anuncio</span>
+        </button>
+      )}
 
       {items.length > 0 && (
         <div className="sigad-noti-stack tr" style={{ zIndex: 3000 }} aria-live="polite">
@@ -865,9 +905,23 @@ const Display: React.FC = () => {
       </div>
 
       <div className="relative z-20">
-  <div className="relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${100/scale}%` }}>
-  <div className="max-w-7xl mx-auto px-6 py-8" style={{ marginRight: drawerPad ? `${Math.round(drawerPad / scale)}px` : undefined, transition: 'margin-right .3s ease' }}>
-        {/* Notificaciones HUD (solo toasts legacy) */}
+        <div
+          className="relative"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            width: `${100 / scale}%`,
+          }}
+        >
+          <div
+            className="mx-auto px-6 py-8"
+            style={{
+              maxWidth: "min(1500px, 100%)",
+              marginRight: drawerPad ? `${Math.round(drawerPad / scale)}px` : undefined,
+              transition: "margin-right .3s ease",
+            }}
+          >
+            {/* Notificaciones HUD (solo toasts legacy) */}
 
         {/* === HEADER SUPER VISUAL === */}
         <SuperHeader
@@ -895,7 +949,7 @@ const Display: React.FC = () => {
         {/* HUD principal */}
         {active && (
           <section className={`hud-shell ${isLight ? "hud-shell--light" : "hud-shell--dark"} sweep`}>
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
               <div
                 className={`hud-hero ${isLight ? "hud-hero--light" : "hud-hero--dark"}`}
                 style={{
@@ -903,6 +957,7 @@ const Display: React.FC = () => {
                   ["--hero-accent-soft" as any]: accentPalette.secondary,
                 }}
               >
+                <span className="hud-hero-brandmark" aria-hidden />
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <Pill isLight={!!isLight}>
                     <IconTrophy className={pick(!!isLight, "size-4 text-zinc-500", "size-4 text-zinc-300")} /> {active.game}
@@ -927,10 +982,14 @@ const Display: React.FC = () => {
                     { value: m, label: "MINUTOS" },
                     { value: s, label: "SEGUNDOS" },
                   ].map((seg, idx) => (
-                    <React.Fragment key={seg.label}>
-                      <TimeBlock value={seg.value} label={seg.label} accent={accent} isLight={!!isLight} />
-                      {idx < 2 && <span className="timer-hero-colon" aria-hidden>:</span>}
-                    </React.Fragment>
+                    <TimeBlock
+                      key={seg.label}
+                      value={seg.value}
+                      label={seg.label}
+                      accent={accent}
+                      isLight={!!isLight}
+                      showDivider={idx < 2}
+                    />
                   ))}
                 </div>
 
@@ -1157,8 +1216,8 @@ const Display: React.FC = () => {
           </section>
         )}
 
-  {/* Panel de anuncios: colocar DEBAJO del HUD principal */}
-  <AnnounceHost tournaments={tournaments} isLight={!!isLight} onMetrics={(w, open)=> setDrawerPad(open ? w + 24 : 0)} />
+        {/* Panel de anuncios: colocar DEBAJO del HUD principal */}
+        <AnnounceHost tournaments={tournaments} isLight={!!isLight} onMetrics={(w, open)=> setDrawerPad(open ? w + 24 : 0)} />
 
         {/* Lista compacta (3 por página) */}
         {!fixedId.current && tournaments.length > 1 && (
