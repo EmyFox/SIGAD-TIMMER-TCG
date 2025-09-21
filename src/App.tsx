@@ -72,7 +72,8 @@ const useClock = (step = 250) => {
 
 /* Deriva remaining desde target y now (sin tocar estado) */
 const getRemainingMs = (t: Tournament, nowMs: number) => {
-  if (!t.timer.target) return 0;
+  if (!t.timer.target) return t.timer.remainingMs;
+  if (!t.timer.running) return t.timer.remainingMs;
   return Math.max(0, t.timer.target - nowMs);
 };
 
@@ -693,8 +694,29 @@ export const MasterPanel: React.FC = () => {
     const now2 = Date.now(); const m = Math.max(1, t.nextRoundMinutes && t.nextRoundMinutes>0 ? t.nextRoundMinutes : t.roundMinutes);
     return { ...t, warned1m:false, timer: { target: now2 + m*60_000, remainingMs: m*60_000, running: true, label:`Ronda ${t.roundsCompleted+1}`, mode:'round' } };
   })), []);
-  const pause = useCallback((id: string) => setTournaments(prev => prev.map(t => t.id === id ? ({ ...t, timer: { ...t.timer, running: false } }) : t)), []);
-  const resume = useCallback((id: string) => setTournaments(prev => prev.map(t => (t.id === id && t.timer.target) ? ({ ...t, timer: { ...t.timer, running: true } }) : t)), []);
+  const pause = useCallback((id: string) => {
+    const now = Date.now();
+    setTournaments(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      if (!t.timer.target) {
+        return t.timer.running ? ({ ...t, timer: { ...t.timer, running: false } }) : t;
+      }
+      const remaining = t.timer.running ? Math.max(0, t.timer.target - now) : t.timer.remainingMs;
+      return { ...t, timer: { ...t.timer, running: false, remainingMs: remaining } };
+    }));
+  }, []);
+  const resume = useCallback((id: string) => {
+    const now = Date.now();
+    setTournaments(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      if (t.timer.running) return t;
+      const remaining = t.timer.remainingMs > 0
+        ? t.timer.remainingMs
+        : (t.timer.target ? Math.max(0, t.timer.target - now) : 0);
+      if (!t.timer.target || remaining <= 0) return t;
+      return { ...t, timer: { ...t.timer, target: now + remaining, remainingMs: remaining, running: true } };
+    }));
+  }, []);
   const resetTimer = useCallback((id: string) => setTournaments(prev => prev.map(t => t.id === id ? ({ ...t, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode:'custom' } }) : t)), []);
   const addMinutes = useCallback((id: string, m: number) => setTournaments(prev => prev.map(t => {
     if (t.id !== id) return t; const tm = t.timer; if (!tm.target) return t;
@@ -730,8 +752,27 @@ export const MasterPanel: React.FC = () => {
   })), []);
 
   // Acciones globales
-  const pauseAll = useCallback(() => setTournaments(prev => prev.map(t => ({ ...t, timer: { ...t.timer, running: false } }))), []);
-  const resumeAll = useCallback(() => setTournaments(prev => prev.map(t => t.timer.target ? ({ ...t, timer: { ...t.timer, running: true } }) : t)), []);
+  const pauseAll = useCallback(() => {
+    const now = Date.now();
+    setTournaments(prev => prev.map(t => {
+      if (!t.timer.target) {
+        return t.timer.running ? ({ ...t, timer: { ...t.timer, running: false } }) : t;
+      }
+      const remaining = t.timer.running ? Math.max(0, t.timer.target - now) : t.timer.remainingMs;
+      return { ...t, timer: { ...t.timer, running: false, remainingMs: remaining } };
+    }));
+  }, []);
+  const resumeAll = useCallback(() => {
+    const now = Date.now();
+    setTournaments(prev => prev.map(t => {
+      if (t.timer.running || !t.timer.target) return t;
+      const remaining = t.timer.remainingMs > 0
+        ? t.timer.remainingMs
+        : Math.max(0, t.timer.target - now);
+      if (remaining <= 0) return t;
+      return { ...t, timer: { ...t.timer, target: now + remaining, remainingMs: remaining, running: true } };
+    }));
+  }, []);
   const resetAll = useCallback(() => setTournaments(prev => prev.map(t => ({ ...t, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode:'custom' } }))), []);
 
   /* ===== Offcanvas Torneo ===== */
