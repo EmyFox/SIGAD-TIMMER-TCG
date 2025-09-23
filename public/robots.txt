@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Sitemap: https://sigad.info/sitemap.xml
+
+# If you want to disallow staging or preview environments, add rules per-host
+# Host: sigad.info

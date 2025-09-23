@@ -1,0 +1,60 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[context.production.environment]
+  NODE_VERSION = "18"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "geolocation=(), microphone=()"
+  Strict-Transport-Security = "max-age=63072000; includeSubDomains"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[redirects]
+  # Force HTTPS (Netlify will provide TLS for your site when you add a custom domain)
+  from = "http://*"
+  to = "https://:splat"
+  status = 301
+# Netlify configuration for SIGAD-TIMMER-TCG
+# - Auto TLS is handled by Netlify when domain is added; these headers enforce HTTPS in browsers.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Use Node 18+ runtime on Netlify (Vite requires modern Node)
+[build.environment]
+  NODE_VERSION = "18"
+
+# Global security headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # HSTS: preload-ready (1 year), include subdomains, preload token
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    # Basic security hardening
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+
+# Cache static assets aggressively (hashed assets from Vite)
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Optional: disable directory listings
+[[headers]]
+  for = "/"
+  [headers.values]
+    X-Directory-Listing = "off"

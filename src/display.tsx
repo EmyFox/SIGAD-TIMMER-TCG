@@ -399,9 +399,10 @@ const SuperHeader: React.FC<{
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           <span
             className={[
-              "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ring-1",
+              "inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm md:text-base font-semibold ring-1",
               isLight ? "bg-zinc-100 text-zinc-700 ring-zinc-200" : "bg-zinc-800/60 text-zinc-200 ring-zinc-700",
             ].join(" ")}
+            aria-label={`Estado del torneo: ${stateLabel}`}
           >
             <span className="relative inline-flex">
               <span className={["status-dot", dotClass].join(" ")} />
@@ -414,12 +415,15 @@ const SuperHeader: React.FC<{
 
           <span
             className={[
-              "hidden md:inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ring-1",
+              "hidden md:inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm md:text-base font-semibold ring-1",
               isLight ? "bg-white/70 ring-zinc-200 text-zinc-700" : "bg-zinc-800/60 ring-zinc-700",
             ].join(" ")}
+            aria-label={`Fecha y hora actuales: ${dayjs(now).format(timeFmt === "12" ? "ddd, DD MMM • hh:mm:ss A" : "ddd, DD MMM • HH:mm:ss")}`}
           >
             <IconClock className={isLight ? "size-3.5 text-zinc-500" : "size-3.5 text-zinc-400"} />
-            {dayjs(now).format(timeFmt === "12" ? "ddd, DD MMM • hh:mm:ss A" : "ddd, DD MMM • HH:mm:ss")}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {dayjs(now).format(timeFmt === "12" ? "ddd, DD MMM • hh:mm:ss A" : "ddd, DD MMM • HH:mm:ss")}
+            </span>
           </span>
         </div>
       </div>
@@ -718,9 +722,11 @@ const Display: React.FC = () => {
 
   const [now, setNow] = useState<number>(Date.now());
   useEffect(() => {
+    // Only run the per-second clock while we have tournaments to reduce CPU when displays are effectively disabled
+    if (!tournaments || tournaments.length === 0) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [tournaments.length]);
 
   useEffect(() => {
     const unsub = subscribeDisplay((s) => {
@@ -869,6 +875,8 @@ const Display: React.FC = () => {
   }, [computeAutoScale]);
 
   const scale = Math.max(0.01, autoScale * currentZoom);
+  // Mostrar HUD (hero) solo si hay id fijo o si solo hay un torneo.
+  const showHero = !!fixedId.current || tournaments.length <= 1;
   return (
     <div
       className={pick(
@@ -947,7 +955,7 @@ const Display: React.FC = () => {
         )}
 
         {/* HUD principal */}
-        {active && (
+        {active && showHero && (
           <section className={`hud-shell ${isLight ? "hud-shell--light" : "hud-shell--dark"} sweep`}>
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
               <div

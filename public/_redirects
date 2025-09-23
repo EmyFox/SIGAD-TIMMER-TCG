@@ -1,2 +1,13 @@
+## Force HTTPS (Netlify)
+http://* https://:splat 301!
+
+# Redirect www to non-www
+https://www.sigad.info/* https://sigad.info/:splat 301!
+
+
+## Keep explicit display routes
 /display /display.html 200
 /display/ /display.html 200
+
+## SPA fallback for client-side routing
+/*    /index.html   200

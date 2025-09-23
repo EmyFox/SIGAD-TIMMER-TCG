@@ -86,7 +86,10 @@ export function emitAll(tournaments: any[], timeFmt: TimeFmt) {
       type: "STATE",
       now: Date.now(),
       timeFmt,
-      tournaments: tournaments.map((t) => ({
+      // Exclude tournaments that are explicitly disabled to avoid unnecessary display updates
+      tournaments: tournaments
+        .filter((t) => t.enabled !== false)
+        .map((t) => ({
         id: t.id,
         name: t.name,
         game: t.game,

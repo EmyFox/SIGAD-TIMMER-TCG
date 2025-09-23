@@ -21,11 +21,13 @@ export const DisplayPreview: React.FC<{
   onToggleTheme: (id: string) => void;
 }> = ({ tournaments, timeFmt, onToggleTheme }) => {
   /* ---------- Orden de previews ---------- */
+  // Only consider enabled tournaments for previews (disabled ones shouldn't load frames)
+  const visibleTournaments = useMemo(() => tournaments.filter(t => t.enabled !== false), [tournaments]);
   const sorted = useMemo(() => {
-    const running = tournaments.filter(t => t.timer.running);
-    const others = tournaments.filter(t => !t.timer.running);
+    const running = visibleTournaments.filter(t => t.timer.running);
+    const others = visibleTournaments.filter(t => !t.timer.running);
     return [...running, ...others].slice(0, 3);
-  }, [tournaments]);
+  }, [visibleTournaments]);
 
   /* ---------- Persistencia ---------- */
   const readObj = (k: string) => {
@@ -98,10 +100,12 @@ export const DisplayPreview: React.FC<{
 
   /* ---------- TICK local para HUD (countdown vivo) ---------- */
   const [, setTick] = useState(0);
+  // Only run the local tick while there are visible tournaments
   useEffect(() => {
+    if (!visibleTournaments || visibleTournaments.length === 0) return;
     const id = setInterval(() => setTick(v => (v+1)%1_000_000), 500); // 2 Hz
     return () => clearInterval(id);
-  }, []);
+  }, [visibleTournaments.length]);
 
   /* ---------- Sin arrastre de altura en sidebar (auto ajuste + zoom) ---------- */
 

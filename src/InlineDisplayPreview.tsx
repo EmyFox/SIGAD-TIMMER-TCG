@@ -38,8 +38,8 @@ export const InlineDisplayPreview: React.FC<{
   const isFxOn = (id: string) => fxMap[id] !== false; // por defecto ON
   const toggleFx = (id: string) => setFxMap(prev => ({ ...prev, [id]: !(prev[id] !== false) }));
 
-  // Sincronización inicial con displays
-  useEffect(() => { try { emitAll([t], timeFmt); } catch {} }, [t, timeFmt]);
+  // Sincronización inicial con displays — solo si el torneo está habilitado
+  useEffect(() => { if (t.enabled === false) return; try { emitAll([t], timeFmt); } catch {} }, [t, timeFmt]);
 
   /* ---------- Medición de ancho ---------- */
   const [boxW, setBoxW] = useState(0);
@@ -226,14 +226,20 @@ export const InlineDisplayPreview: React.FC<{
             <span className="d-none d-md-inline text-truncate" style={{ maxWidth: frameW < 520 ? 140 : 260, padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(0,0,0,.25)' }}>{phase}</span>
           </div>
 
-          {/* Iframe */}
-          <iframe
-            id={`inline-prev-${t.id}`}
-            src={url}
-            title={`preview-${t.name}`}
-            onLoad={markLoaded}
-            style={{ width: baseW, height: baseH, border: 0, transform: `scale(${scale}) translateZ(0)`, transformOrigin: 'top left', willChange: 'transform', background: 'transparent' }}
-          />
+          {/* Iframe (omitimos si el torneo está deshabilitado para ahorrar recursos) */}
+          {t.enabled === false ? (
+            <div style={{ width: baseW, height: baseH, borderRadius: 8, border: '1px dashed rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="text-secondary small">Preview deshabilitado</div>
+            </div>
+          ) : (
+            <iframe
+              id={`inline-prev-${t.id}`}
+              src={url}
+              title={`preview-${t.name}`}
+              onLoad={markLoaded}
+              style={{ width: baseW, height: baseH, border: 0, transform: `scale(${scale}) translateZ(0)`, transformOrigin: 'top left', willChange: 'transform', background: 'transparent' }}
+            />
+          )}
 
           {/* Indicador escala */}
           <div className="position-absolute" style={{ right: 6, bottom: 6, padding: '2px 8px', fontSize: 11, borderRadius: 8, background: 'rgba(0,0,0,.55)', color: '#fff', display: 'inline-flex', gap: 8, alignItems: 'center', zIndex: 2 }}>

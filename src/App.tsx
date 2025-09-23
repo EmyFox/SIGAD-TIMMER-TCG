@@ -6,6 +6,7 @@ import { PanelToastHost, panelNotify } from './notificationsPanel';
 import { useAuth } from './auth';
 import { BrandLogo } from './BrandLogo';
 import InlineDisplayPreview from './InlineDisplayPreview';
+import { TutorialPrompt, TutorialOverlay } from './tutorial';
 import { ErrorBoundary } from './ErrorBoundary';
 
 /* =============================================================
@@ -16,7 +17,7 @@ import { ErrorBoundary } from './ErrorBoundary';
    ============================================================= */
 
 /* ====================== Tipos y utilidades ====================== */
-export type GameType = "Pokémon TCG" | "Yu-Gi-Oh!" | "Magic: The Gathering" | "Otro";
+export type GameType = "Pokémon TCG" | "Yu-Gi-Oh!" | "Magic: The Gathering" | "Disney Lorcana" | "Otro";
 export type TimerMode = 'round' | 'break' | 'custom';
 
 export interface TimerState {
@@ -43,6 +44,7 @@ export interface Tournament {
   createdAt: number;
   notes?: string;
   displayTheme?: 'dark'|'light';
+  enabled?: boolean;
 }
 
 export type SortBy = "created" | "eta" | "name" | "game";
@@ -98,7 +100,10 @@ const COLOR = {
   secondary: "var(--bs-secondary)",
 } as const;
 const gameColorKey = (g: GameType): keyof typeof COLOR => (
-  g === "Pokémon TCG" ? "primary" : g === "Yu-Gi-Oh!" ? "warning" : g === "Magic: The Gathering" ? "success" : "secondary"
+  g === "Pokémon TCG" ? "primary"
+  : g === "Yu-Gi-Oh!" ? "warning"
+  : g === "Magic: The Gathering" ? "success"
+  : /* Disney Lorcana u otros */ "secondary"
 );
 
 /* ====================== Persistencia ====================== */
@@ -146,6 +151,7 @@ const sanitizeTournament = (t: any): Tournament | null => {
     createdAt: Number.isFinite(t.createdAt) ? t.createdAt : Date.now(),
     notes: typeof t.notes === 'string' ? t.notes.slice(0, 2000) : '',
     displayTheme: (t.displayTheme === 'light' || t.displayTheme === 'dark') ? t.displayTheme : 'dark'
+    , enabled: t.enabled === false ? false : true
   } satisfies Tournament;
   return safe;
 };
@@ -194,7 +200,7 @@ const computeSchedule = (t: Tournament, tf: TimeFmt, nowMs?: number) => {
 };
 
 /* ====================== Comunes UI ====================== */
-const games: GameType[] = ["Pokémon TCG", "Yu-Gi-Oh!", "Magic: The Gathering", "Otro"];
+const games: GameType[] = ["Pokémon TCG", "Yu-Gi-Oh!", "Magic: The Gathering", "Disney Lorcana", "Otro"];
 
 /* ====================== Offcanvas Crear/Editar ====================== */
 interface ModalData { id?: string; name: string; game: GameType; roundsTotal: number; roundsCompleted: number; roundMinutes: number; breakEnabled: boolean; breakMinutes: number; autoStartNext: boolean; nextRoundMinutes?: number | null; displayTheme?: 'dark'|'light'; }
@@ -208,7 +214,7 @@ const TournamentOffcanvas: React.FC<{ open:boolean; onClose:()=>void; onSubmit:(
   if(!open) return null;
   return (
     <>
-      <div className="offcanvas offcanvas-end show text-bg-dark" style={{visibility:'visible'}}>
+      <div className="offcanvas offcanvas-end show text-bg-dark" style={{visibility:'visible'}} data-tut="offcanvas-tournament">
         <div className="offcanvas-header">
           <h5 className="offcanvas-title">{initial?.id ? 'Editar torneo' : 'Nuevo torneo'}</h5>
           <button className="btn-close btn-close-white" onClick={onClose} aria-label="Cerrar"></button>
@@ -280,7 +286,7 @@ const TournamentOffcanvas: React.FC<{ open:boolean; onClose:()=>void; onSubmit:(
 
 /* ====================== Offcanvas Ajustes ====================== */
 interface Settings { timeFmt: TimeFmt; cols: 1|2|3; soundEnabled: boolean; warn1m: boolean; autoOpenDisplay: boolean; }
-const defaultSettings: Settings = { timeFmt: '24', cols: 1, soundEnabled: true, warn1m: true, autoOpenDisplay: false };
+const defaultSettings: Settings = { timeFmt: '24', cols: 3, soundEnabled: true, warn1m: true, autoOpenDisplay: false };
 
 const SettingsOffcanvas: React.FC<{ open:boolean; onClose:()=>void; value:Settings; onChange:(s:Settings)=>void }>=({open,onClose,value,onChange})=>{
   const [s, setS] = useState<Settings>(value);
@@ -289,7 +295,7 @@ const SettingsOffcanvas: React.FC<{ open:boolean; onClose:()=>void; value:Settin
   if(!open) return null;
   return (
     <>
-      <div className="offcanvas offcanvas-end show text-bg-dark" style={{visibility:'visible'}}>
+      <div className="offcanvas offcanvas-end show text-bg-dark" style={{visibility:'visible'}} data-tut="offcanvas-settings">
         <div className="offcanvas-header">
           <h5 className="offcanvas-title">Ajustes</h5>
           <button className="btn-close btn-close-white" onClick={onClose} aria-label="Cerrar"></button>
@@ -366,12 +372,13 @@ type HeaderHUDProps = {
   importJSON: (f: File)=>void;
   AnnouncementBtn: React.FC<{ pushToast:(t:{kind:any;text:string})=>void }>;
   pushToast: (t:{kind:any;text:string})=>void;
+  onOpenTutorial: ()=>void;
 };
 
 const HeaderHUD: React.FC<HeaderHUDProps> = ({
   now, nowMs, user, onLock, onLogout, settings, setSettings, tournaments, runningCount, anyRunning,
   onPauseAll, onResumeAll, onResetAll, onNew, onCopySchedule, onExport, onOpenSettings,
-  fileInputRef, importJSON, AnnouncementBtn, pushToast
+  fileInputRef, importJSON, AnnouncementBtn, pushToast, onOpenTutorial
 }) => {
   const total = tournaments.length;
 
@@ -455,7 +462,8 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
                   <button className="btn btn-outline-danger" onClick={onLogout} title="Cerrar sesión">⎋</button>
                 </div>
               )}
-              <button className="btn btn-sm btn-outline-info align-self-end" onClick={onOpenSettings} title="Ajustes (S)">⚙️ Ajustes</button>
+              <button className="btn btn-sm btn-outline-info align-self-end" onClick={onOpenSettings} title="Ajustes (S)" data-tut="header-settings">⚙️ Ajustes</button>
+              <button className="btn btn-sm btn-outline-light align-self-end" onClick={onOpenTutorial} title="Ver tutorial" data-tut="header-tutorial">❓ Tutorial</button>
             </div>
           </div>
 
@@ -463,7 +471,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
           <div className="mt-3 d-flex flex-wrap align-items-center gap-3">
             {/* Controles segmentados */}
             <div className="d-flex align-items-center gap-2">
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2" data-tut="header-timefmt">
                 <span className="text-secondary small">Hora</span>
                 <div className="btn-group btn-group-sm" role="group" aria-label="Hora">
                   <input type="radio" className="btn-check" name="tf" id="tf24"
@@ -478,7 +486,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
                 </div>
               </div>
 
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2" data-tut="header-cols">
                 <span className="text-secondary small">Presentación</span>
                 <div className="btn-group btn-group-sm" role="group" aria-label="Cols">
                   <input type="radio" className="btn-check" name="cols" id="c1"
@@ -502,9 +510,9 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
             {/* Acciones rápidas */}
             <div className="vr d-none d-md-block"/>
             <div className="d-flex flex-wrap gap-2">
-              <button className="btn btn-sm btn-outline-danger" onClick={onResetAll} title="Resetear todos">↺ Reset global</button>
-              <button className="btn btn-sm btn-primary" onClick={onNew} title="Nuevo (N)">➕ Nuevo</button>
-              <button className="btn btn-sm btn-outline-secondary" onClick={onCopySchedule} title="Ver itinerario">📋 Itinerario</button>
+              <button className="btn btn-sm btn-outline-danger" onClick={() => { if (confirm('¿Seguro que quieres resetear TODOS los timers? Esta acción no se puede deshacer.')) onResetAll(); }} title="Resetear todos" data-tut="header-reset-all">↺ Reset global</button>
+              <button className="btn btn-sm btn-primary" onClick={onNew} title="Nuevo (N)" data-tut="header-new">➕ Nuevo</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={onCopySchedule} title="Ver itinerario" data-tut="header-itinerary">📋 Itinerario</button>
 
               {/* Importar/Exportar/Ajustes/Anuncio */}
               <input
@@ -518,7 +526,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
                   if(fileInputRef.current) fileInputRef.current.value='';
                 }}
               />
-              <div className="position-relative">
+              <div className="position-relative" data-tut="header-data-menu">
                 <button className="btn btn-sm btn-outline-light" onClick={(e)=>{e.stopPropagation(); (window as any).__dataMenuOpen = !(window as any).__dataMenuOpen; const el=document.getElementById('data-menu'); if(el){ el.style.display = (window as any).__dataMenuOpen? 'block':'none'; }}}>🗂 Datos</button>
                 <div id="data-menu" className="shadow dropdown-menu p-1" style={{display:'none', position:'absolute', inset:'auto auto 0 0', transform:'translateY(100%)', minWidth:180, background:'#1b1f28', border:'1px solid #2c313a'}}>
                   <button className="dropdown-item text-start" onClick={()=>{ const el=document.getElementById('data-menu'); if(el) el.style.display='none'; fileInputRef.current?.click(); }}>📥 Importar JSON…</button>
@@ -542,7 +550,7 @@ const HeaderHUD: React.FC<HeaderHUDProps> = ({
 };
 
 /* ====================== Panel Maestro (tema oscuro) ====================== */
-export const MasterPanel: React.FC = () => {
+const MasterPanelInner: React.FC = () => {
   const { lock, logout, user } = useAuth();
   useEffect(()=>{ document.documentElement.setAttribute('data-bs-theme','dark'); },[]);
   // Forzar locale español
@@ -555,7 +563,13 @@ export const MasterPanel: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>(() => {
     const fromLS = loadTours();
     if (fromLS && Array.isArray(fromLS) && fromLS.length) return fromLS;
-    return [{ id: uid(), name: "Torneo A", game: "Pokémon TCG", roundsTotal: 5, roundsCompleted: 0, roundMinutes: 50, breakEnabled: true, breakMinutes: 10, autoStartNext: false, nextRoundMinutes: null, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode: 'custom' }, createdAt: Date.now(), notes: '', displayTheme:'dark' }];
+    // Semilla por defecto: 3 torneos base
+    const now = Date.now();
+    return [
+      { id: uid(), name: "Liga Pokémon", game: "Pokémon TCG", roundsTotal: 5, roundsCompleted: 0, roundMinutes: 50, breakEnabled: true, breakMinutes: 10, autoStartNext: false, nextRoundMinutes: null, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode: 'custom' }, createdAt: now, notes: '', displayTheme:'dark' },
+      { id: uid(), name: "Liga Yu-Gi-Oh!", game: "Yu-Gi-Oh!", roundsTotal: 5, roundsCompleted: 0, roundMinutes: 50, breakEnabled: true, breakMinutes: 10, autoStartNext: false, nextRoundMinutes: null, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode: 'custom' }, createdAt: now+1, notes: '', displayTheme:'dark' },
+      { id: uid(), name: "Liga Disney Lorcana", game: "Disney Lorcana", roundsTotal: 5, roundsCompleted: 0, roundMinutes: 50, breakEnabled: true, breakMinutes: 10, autoStartNext: false, nextRoundMinutes: null, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode: 'custom' }, createdAt: now+2, notes: '', displayTheme:'dark' },
+    ];
   });
   useEffect(() => { saveTours(tournaments); }, [tournaments]);
 
@@ -582,6 +596,20 @@ export const MasterPanel: React.FC = () => {
 
   // Reloj numérico para timers
   const nowMs = useClock(250);
+
+  // Tutorial: preguntar tras login una sola vez (por dispositivo)
+  const LS_TUT = 'sigad_tutorial_seen_v1';
+  const [showTutorialPrompt, setShowTutorialPrompt] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  useEffect(()=>{
+    // Cuando hay usuario y no está bloqueado, si no se ha visto, preguntar
+    try {
+      const seen = localStorage.getItem(LS_TUT) === '1';
+      if (user && !seen) setShowTutorialPrompt(true);
+    } catch {}
+  }, [user]);
+  const acceptTutorial = () => { setShowTutorialPrompt(false); setShowTutorial(true); try { localStorage.setItem(LS_TUT, '1'); } catch {} };
+  const declineTutorial = () => { setShowTutorialPrompt(false); try { localStorage.setItem(LS_TUT, '1'); } catch {} };
 
   // Toasts
   const pushToast = useCallback((t: { kind: any; text: string }) => {
@@ -676,6 +704,8 @@ export const MasterPanel: React.FC = () => {
   const startRound = useCallback((id: string, minutes?: number, label?: string) => {
     setTournaments(prev => prev.map(t => {
       if (t.id !== id) return t;
+      // don't start rounds on disabled tournaments
+      if (t.enabled === false) { pushToast({ kind: 'warning', text: `⚠ ${t.name} está deshabilitado` }); return t; }
       const m = Math.max(1, minutes ?? (t.nextRoundMinutes && t.nextRoundMinutes > 0 ? t.nextRoundMinutes : t.roundMinutes));
       const now2 = Date.now();
       pushToast({ kind: 'success', text: `▶ ${t.name}: nueva ronda (${m} min)` });
@@ -724,31 +754,31 @@ export const MasterPanel: React.FC = () => {
     const newRemaining = Math.max(0, (tm.target - Date.now()) + m * 60_000);
     const rearmWarn = newRemaining > 60_000;  // rearmar si volvimos a >60s
     pushToast({ kind:'secondary', text:`${m>0?'+':''}${m}m en ${t.name}` });
-    if (newRemaining <= 0) return { ...t, warned1m:false, timer: { target:null, remainingMs:0, running:false, label:'Terminado', mode:'custom' } };
+    if (newRemaining <= 0) return { ...t, warned1m:false, timer: { target:null, remainingMs: 0, running: false, label: 'Terminado', mode: 'custom' } };
     return { ...t, warned1m: rearmWarn ? false : t.warned1m, timer: { ...tm, target: newTarget, remainingMs: newRemaining } };
   })), [pushToast]);
   const restartCurrentRound = useCallback((id: string) => setTournaments(prev => prev.map(t => {
     if (t.id !== id) return t; const m = Math.max(1, t.roundMinutes); const now2=Date.now();
-    return { ...t, warned1m:false, timer: { target: now2 + m*60_000, remainingMs: m*60_000, running:true, label:`Ronda ${computeRoundsInfo(t).currentIndex + 1}`, mode:'round' } };
+    return { ...t, warned1m:false, timer: { target: now2 + m*60_000, remainingMs: m*60_000, running: true, label:`Ronda ${computeRoundsInfo(t).currentIndex + 1}`, mode:'round' } };
   })), []);
   const prevRound = useCallback((id: string) => setTournaments(prev => prev.map(t => {
     if (t.id !== id) return t; const back = Math.max(0, t.roundsCompleted - 1);
     pushToast({ kind:'secondary', text:`↩ ${t.name}: volver a ronda ${back}` });
-    return { ...t, roundsCompleted: back, warned1m:false, timer: { target: null, remainingMs: 0, running:false, label:'Sin iniciar', mode:'custom' } };
+    return { ...t, roundsCompleted: back, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: 'Sin iniciar', mode: 'custom' } };
   })), [pushToast]);
   const completeRound = useCallback((id: string) => setTournaments(prev => prev.map(t => {
     if (t.id !== id) return t; const done = Math.min(t.roundsTotal, t.roundsCompleted + 1);
     pushToast({ kind:'warning', text:`✅ ${t.name}: fin de ronda (${done}/${t.roundsTotal})` });
-    return { ...t, roundsCompleted: done, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode:'custom' } };
+    return { ...t, roundsCompleted: done, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: "Sin iniciar", mode: 'custom' } };
   })), [pushToast]);
   const nextRound = useCallback((id: string) => setTournaments(prev => prev.map(t => {
     if (t.id !== id) return t; const done = Math.min(t.roundsTotal, t.roundsCompleted + 1);
     if (done > t.roundsTotal) return t;
     const now2 = Date.now(); const m = Math.max(1, t.nextRoundMinutes && t.nextRoundMinutes>0 ? t.nextRoundMinutes : t.roundMinutes);
     if (done >= t.roundsTotal) {
-      return { ...t, roundsCompleted: t.roundsTotal, warned1m:false, timer: { target: null, remainingMs: 0, running:false, label:'Terminado', mode:'custom' } };
+      return { ...t, roundsCompleted: t.roundsTotal, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: 'Terminado', mode: 'custom' } };
     }
-    return { ...t, roundsCompleted: done, warned1m:false, timer: { target: now2 + m * 60_000, remainingMs: m * 60_000, running: true, label: `Ronda ${done + 1}`, mode:'round' } };
+    return { ...t, roundsCompleted: done, warned1m:false, timer: { target: now2 + m * 60_000, remainingMs: m * 60_000, running: true, label: `Ronda ${done + 1}`, mode: 'round' } };
   })), []);
 
   // Acciones globales
@@ -783,10 +813,12 @@ export const MasterPanel: React.FC = () => {
   const closeCanvas = () => setCanvasOpen(false);
   const submitCanvas = (data: ModalData) => {
     if (data.id) {
-      setTournaments(prev => prev.map(t => t.id === data.id ? ({ ...t, name: data.name, game: data.game, roundsTotal: data.roundsTotal, roundsCompleted: Math.min(data.roundsCompleted, data.roundsTotal), roundMinutes: data.roundMinutes, breakEnabled: data.breakEnabled, breakMinutes: data.breakMinutes, autoStartNext: data.autoStartNext, nextRoundMinutes: data.nextRoundMinutes ?? null, displayTheme: data.displayTheme || 'dark' }) : t));
+  setTournaments(prev => prev.map(t => t.id === data.id ? ({ ...t, name: data.name, game: data.game, roundsTotal: data.roundsTotal, roundsCompleted: Math.min(data.roundsCompleted, data.roundsTotal), roundMinutes: data.roundMinutes, breakEnabled: data.breakEnabled, breakMinutes: data.breakMinutes, autoStartNext: data.autoStartNext, nextRoundMinutes: data.nextRoundMinutes ?? null, displayTheme: data.displayTheme || 'dark' }) : t));
     } else {
       const id = uid();
       const newT: Tournament = { id, name: data.name || `Torneo ${tournaments.length+1}`, game: data.game, roundsTotal: Math.max(1, data.roundsTotal), roundsCompleted: 0, roundMinutes: Math.max(1, data.roundMinutes), breakEnabled: data.breakEnabled, breakMinutes: Math.max(0, data.breakMinutes), autoStartNext: data.autoStartNext, nextRoundMinutes: data.nextRoundMinutes ?? null, warned1m:false, timer: { target: null, remainingMs: 0, running: false, label: 'Sin iniciar', mode:'custom' }, createdAt: Date.now(), notes: '', displayTheme: data.displayTheme || 'dark' };
+  // ensure enabled by default
+  newT.enabled = true;
       setTournaments(prev => [newT, ...prev]);
     }
     setCanvasOpen(false);
@@ -800,6 +832,7 @@ export const MasterPanel: React.FC = () => {
   const duplicateTournament = useCallback((id: string) => setTournaments(prev => {
     const src = prev.find(t=>t.id===id); if(!src) return prev;
     const copy: Tournament = { ...src, id: uid(), name: `${src.name} (copia)`, warned1m:false, timer: { target:null, remainingMs:0, running:false, label:'Sin iniciar', mode:'custom' }, createdAt: Date.now(), notes: src.notes || '' };
+    copy.enabled = src.enabled === false ? false : true;
     return [copy, ...prev];
   }), []);
   const removeTournament = useCallback((id: string) => { if (!confirm("Eliminar torneo?")) return; setTournaments(prev => prev.filter(t => t.id !== id)); closeDisplayMark(id); }, []);
@@ -930,6 +963,7 @@ export const MasterPanel: React.FC = () => {
         importJSON={importJSON}
         AnnouncementBtn={AnnouncementButton}
         pushToast={pushToast as any}
+        onOpenTutorial={()=>setShowTutorial(true)}
       />
 
       {/* Grid con previews integrados por tarjeta */}
@@ -943,7 +977,14 @@ export const MasterPanel: React.FC = () => {
                 timeFmt={settings.timeFmt}
                 compact={compact}
                 onEdit={()=>openEdit(t)}
-                onChange={(patch) => setTournaments(prev => prev.map(x => x.id === t.id ? ({ ...x, ...patch }) : x))}
+                onChange={(patch) => {
+                  // apply patch and ensure displays receive the updated state immediately (so disabling stops frames)
+                  setTournaments(prev => {
+                    const next = prev.map(x => x.id === t.id ? ({ ...x, ...patch }) : x);
+                    try { emitAll(next, settings.timeFmt); } catch {};
+                    return next;
+                  });
+                }}
                 startRound={(mins?: number, label?: string) => startRound(t.id, mins, label)}
                 startBreak={()=>startBreakNow(t.id)}
                 skipBreak={()=>skipBreak(t.id)}
@@ -975,8 +1016,28 @@ export const MasterPanel: React.FC = () => {
       <SettingsOffcanvas open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={settings} onChange={(s)=>{ setSettings(s); setSettingsOpen(false); }} />
       <PanelToastHost position="top-right" />
       <AnnouncementConfigurator tournaments={tournaments} />
+      <TutorialPrompt open={showTutorialPrompt} onAccept={acceptTutorial} onDecline={declineTutorial} />
+      <TutorialOverlay open={showTutorial} onClose={()=>setShowTutorial(false)} />
     </>
   );
+};
+
+// Wrapper that avoids mounting the heavy MasterPanelInner until the user is authenticated
+export const MasterPanel: React.FC = () => {
+  const { user, locked } = useAuth();
+  // If no session (login screen) or screen locked, render a minimal lightweight placeholder
+  if (!user || locked) {
+    return (
+      <div className="min-h-screen d-flex align-items-center justify-content-center" style={{background:'#0b0d10'}}>
+        <div style={{textAlign:'center'}}>
+          <BrandLogo size={96} />
+          <div className="mt-3 text-secondary small">Inicia sesión para cargar la interfaz completa</div>
+        </div>
+      </div>
+    );
+  }
+
+  return <MasterPanelInner />;
 };
 
 /* ====================== Tarjeta ====================== */
@@ -1039,20 +1100,44 @@ const TournamentCard: React.FC<{
       {/* Cabecera compacta */}
       <header className="card-header bg-body border-0 py-2" style={{ minWidth: 0 }}>
         <div className="d-flex align-items-center gap-2 flex-wrap" style={{ minWidth: 0 }}>
-          <span className="badge" style={{backgroundColor: colorCss}}>{t.game}</span>
-          <span className="ms-1 text-secondary small text-truncate" style={{ minWidth: 0 }}>
-            {t.timer.mode==='break'? 'Break' : 'Ronda'} • {inRound ? currentIndex : Math.min(currentIndex + 1, t.roundsTotal)} / {t.roundsTotal}
-          </span>
+          <div className="d-flex align-items-center gap-2" style={{ minWidth: 0 }}>
+            <span className="badge" style={{backgroundColor: colorCss}}>{t.game}</span>
+            <span className="ms-1 text-secondary small text-truncate" style={{ minWidth: 0 }}>
+              {t.timer.mode==='break'? 'Break' : 'Ronda'} • {inRound ? currentIndex : Math.min(currentIndex + 1, t.roundsTotal)} / {t.roundsTotal}
+            </span>
+          </div>
 
-          <div className="ms-auto d-flex gap-1 flex-wrap align-items-center">
+          {/* Centered action group: keeps buttons centered and responsive */}
+          <div className="mx-auto d-flex gap-2 flex-wrap align-items-center justify-content-center">
             <button className="btn btn-sm btn-outline-light" onClick={onEdit} title="Editar">✎</button>
+
+            {/* Enable / disable tournament */}
             <button
-              className={`btn btn-sm ${isDisplayOpen ? 'btn-success' : 'btn-primary'}`}
-              onClick={openDisplay}
-              title="Ver display"
+              type="button"
+              className={`btn btn-sm ms-1 me-1 ${t.enabled === false ? 'btn-outline-danger' : 'btn-outline-success'}`}
+              onClick={() => { const val = !(t.enabled !== false); onChange({ enabled: val }); if (!val) pause(); }}
+              aria-pressed={t.enabled !== false}
+              title={t.enabled === false ? 'Torneo deshabilitado (clic para activar)' : 'Torneo activo (clic para desactivar)'}
             >
-              🖥 <span className="ms-1">Ver display</span>{isDisplayOpen && <span className="ms-1 d-none d-lg-inline">· Abierto</span>}
+              {t.enabled === false ? 'Off' : 'On'}
             </button>
+
+            <div className="d-flex align-items-center gap-2">
+              <button
+                className={`btn ${isDisplayOpen ? 'btn-success' : 'btn-primary'} btn-lg d-flex align-items-center shadow-sm`}
+                onClick={() => { if (t.enabled === false) return; openDisplay(); }}
+                data-tut="card-open-display"
+                title={t.enabled === false ? 'Torneo deshabilitado' : 'Ver display'}
+                aria-label={t.enabled === false ? 'Torneo deshabilitado' : 'Ver display'}
+                disabled={t.enabled === false}
+                style={{paddingLeft: '0.9rem', paddingRight: '0.9rem'}}
+              >
+                <span style={{fontSize: 18, lineHeight: 1}}>🖥</span>
+                <span className="ms-2 fw-semibold">Ver</span>
+              </button>
+              {isDisplayOpen && <span className="text-success small ms-1 d-none d-md-inline">Abierto</span>}
+            </div>
+
             <button className="btn btn-sm btn-outline-light" onClick={duplicate} title="Duplicar">⧉</button>
             <button className="btn btn-sm btn-outline-danger" onClick={remove} title="Eliminar">🗑</button>
           </div>
@@ -1061,24 +1146,26 @@ const TournamentCard: React.FC<{
 
   <div className="card-body d-flex flex-column gap-3 text-center">
     {/* Preview arriba de la ficha */}
-    <InlineDisplayPreview tournament={t} timeFmt={timeFmt} onToggleTheme={onToggleTheme} />
+    <div data-tut="card-preview">
+      <InlineDisplayPreview tournament={t} timeFmt={timeFmt} onToggleTheme={onToggleTheme} />
+    </div>
         <input aria-label="Nombre del torneo" className={nameInputClass} value={t.name} onChange={e=>onChange({ name: e.target.value })} />
 
         {/* ===== Controles prioritarios ===== */}
-  <div className="border rounded p-2" style={{backgroundColor: 'var(--bs-body-secondary-bg)'}}>
+  <div className="border rounded p-2" style={{backgroundColor: 'var(--bs-body-secondary-bg)'}} data-tut="card-priority-controls">
           {/* Estado: sin iniciar */}
           {(!t.timer.running && t.timer.target === null) && (
             <>
               <div className="d-flex flex-wrap gap-2 mb-2">
-                <button className={`${mainBtn} btn-primary px-3 py-2`} onClick={()=>startRound()}>▶ Iniciar</button>
-                {t.breakEnabled && t.breakMinutes>0 && (
-                  <button className={`${mainBtn} btn-outline-primary px-3 py-2`} onClick={startBreak}>☕ Break</button>
-                )}
+                <button className={`${mainBtn} ${t.enabled === false ? 'btn-secondary' : 'btn-primary'} px-3 py-2`} onClick={()=>startRound()} data-tut="card-start" disabled={t.enabled === false}>▶ Iniciar</button>
+                 {t.breakEnabled && t.breakMinutes>0 && (
+                   <button className={`${mainBtn} btn-outline-primary px-3 py-2`} onClick={startBreak} disabled={t.enabled === false}>☕ Break</button>
+                 )}
               </div>
               <div className="d-flex flex-wrap gap-1">
                 <div className="btn-group btn-group-sm" role="group" aria-label="Inicio rápido">
                   {[30,40,45,50,60].map(m=> (
-                    <button key={m} className="btn btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m)`)}>{m}m</button>
+                    <button key={m} className="btn btn-outline-secondary" onClick={()=>startRound(m, `Ronda rápida (${m}m`)} disabled={t.enabled === false}>{m}m</button>
                   ))}
                 </div>
               </div>
@@ -1274,7 +1361,7 @@ const ItineraryModal: React.FC<{ open: boolean; onClose: ()=>void; tournaments: 
     try{ await navigator.clipboard.writeText(content); }catch{}
   };
   return (
-    <div style={{position:'fixed', inset:0, zIndex:2600, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog">
+    <div style={{position:'fixed', inset:0, zIndex:2600, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog" data-tut="modal-itinerary">
       <div onClick={onClose} style={{position:'absolute', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(2px)'}} />
       <div className="shadow-lg" style={{position:'relative', width:'min(840px, 92%)', background:'#12141a', border:'1px solid #2c313a', borderRadius:12, padding:'1rem'}}>
         <div className="d-flex align-items-center mb-2">
@@ -1299,7 +1386,7 @@ const announcementState: { open: boolean; setOpen?: (v:boolean)=>void; submit?: 
 
 const AnnouncementButton: React.FC<{ pushToast: (t: {kind:any; text:string; icon?:string})=>void }> = () => {
   return (
-    <button className="btn btn-sm btn-outline-warning" onClick={()=>{ announcementState.open = true; announcementState.setOpen?.(true); }} title="Anuncio público avanzado (A)">📢 Anunciar</button>
+    <button className="btn btn-sm btn-outline-warning" data-tut="header-announce" onClick={()=>{ announcementState.open = true; announcementState.setOpen?.(true); }} title="Anuncio público avanzado (A)">📢 Anunciar</button>
   );
 };
 
@@ -1455,7 +1542,7 @@ const AnnouncementConfigurator: React.FC<{ tournaments: Tournament[] }> = ({ tou
   },[open, draft]);
   if(!open) return null;
   return (
-    <div style={{position:'fixed', inset:0, zIndex:2500, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog">
+    <div style={{position:'fixed', inset:0, zIndex:2500, display:'flex', alignItems:'center', justifyContent:'center'}} aria-modal="true" role="dialog" data-tut="modal-announce">
       <div onClick={close} style={{position:'absolute', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(2px)'}} />
       <div className="shadow-lg d-flex flex-column" style={{position:'relative', width:'min(760px, 94%)', maxHeight:'90vh', background:'#12141a', border:'1px solid #2c313a', borderTop:`4px solid ${draft.color}`, borderRadius:12}}>
         <div className="d-flex align-items-center px-3 py-2" style={{position:'sticky', top:0, background:'#12141a', zIndex:1}}>
